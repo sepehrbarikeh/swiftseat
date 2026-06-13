@@ -67,3 +67,11 @@ func (s *SeatService) ConfirmPayment(SeatNumber string, eventID, userID uint, am
 	return ticket, nil
 }
 
+
+func (s *SeatService) GetUserTickets(userID uint) ([]models.Ticket, *apperrors.AppError) {
+    tickets, err := s.repo.GetUserTickets(userID)
+    if err != nil {
+        return nil, apperrors.New(http.StatusInternalServerError, "Failed to retrieve user tickets", err)
+    }
+    return tickets, nil
+}

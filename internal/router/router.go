@@ -31,15 +31,18 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 	})
 
 	api := app.Group("/api")
+	secured := api.Group("/", middleware.AuthRequired())
+
 	// user routes //
 	api.Post("/register", userHandler.Register)
 	api.Post("/login", userHandler.Login)
-// events routes //
-	api.Get("/events", eventHandler.GetEvents)
 
-	secured := api.Group("/", middleware.AuthRequired())
+	// events routes //
+	api.Get("/events", eventHandler.GetEvents)
 	secured.Post("/events", eventHandler.CreateEvent)
+
+	// seats routes
 	secured.Post("/seats/reserve", seatLimiter, seatHandler.Reserve)
 	secured.Post("/seats/confirm-payment", seatHandler.ConfirmPayment)
-
+	secured.Get("/tickets/my", seatHandler.GetMyTickets)
 }

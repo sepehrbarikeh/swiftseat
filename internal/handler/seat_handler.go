@@ -79,3 +79,35 @@ func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
         },
     })
 }
+
+
+func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
+    // استخراج آیدی کاربر از توکن JWT
+    userID := c.Locals("userID").(uint)
+
+    tickets, appErr := h.svc.GetUserTickets(userID)
+    if appErr != nil {
+        return c.Status(appErr.StatusCode).JSON(appErr)
+    }
+
+    // فرمت کردن دیتای خروجی برای اینکه فرانت‌آند راحت‌ترین ساختار رو داشته باشه
+    var formattedTickets []fiber.Map
+    for _, t := range tickets {
+        formattedTickets = append(formattedTickets, fiber.Map{
+            "ticket_ref":   t.TicketRef,
+            "paid_amount":  t.PaidAmount,
+            "issued_at":    t.CreatedAt,
+            "seat_number":  t.Seat.SeatNumber,
+            "row_name":     t.Seat.RowName,
+            "event_title":  t.Event.Title,
+            "location":     t.Event.Location,
+            "event_date":   t.Event.CreatedAt, // یا هر فیلد تاریخی که در مدل ایونت داری
+        })
+    }
+
+    return c.Status(http.StatusOK).JSON(fiber.Map{
+        "status":  "success",
+        "count":   len(formattedTickets),
+        "tickets": formattedTickets,
+    })
+}

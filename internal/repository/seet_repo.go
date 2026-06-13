@@ -143,3 +143,20 @@ func (p *PostgresDB) BulkCreateSeatStatuses(statuses []models.SeatStatus) error 
 	// پارامتر دوم (مثلاً 100) می‌گوید دیتاها را در دسته‌های 100 تایی دسته‌بندی و ایمپورت کن.
 	return p.DB.CreateInBatches(&statuses, 100).Error
 }
+
+func (p *PostgresDB) GetUserTickets(userID uint) ([]models.Ticket, error) {
+    var tickets []models.Ticket
+  
+	
+    err := p.DB.
+        Preload("Event").
+        Preload("Seat").
+        Where("user_id = ?", userID).
+        Order("created_at DESC").
+        Find(&tickets).Error
+
+    if err != nil {
+        return nil, err
+    }
+    return tickets, nil
+}

@@ -18,6 +18,7 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 
 	secured.Post("/events", eventHandler.CreateEvent)   // فقط کاربران لاگین شده ایونت بسازند
 	secured.Post("/seats/reserve", seatHandler.Reserve) // رزرو صندلی کاملاً امن شد!
+	secured.Post("/seats/confirm-payment", seatHandler.ConfirmPayment)
 
-	// باقی کدهای لیسن سرور ...
+
 }

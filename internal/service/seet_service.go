@@ -4,7 +4,9 @@ import (
 	"net/http"
 	"time"
 
+	"swift-seat/internal/models"
 	"swift-seat/internal/pkg/apperrors"
+	"swift-seat/internal/pkg/ticket"
 	"swift-seat/internal/repository"
 )
 
@@ -40,23 +42,26 @@ func (s *SeatService) HoldSeat(seatID uint, eventID uint, userID uint) *apperror
 }
 
 
-// ConfirmPayment فرآیند پرداخت و خرید قطعی صندلی را مدیریت می‌کند
-func (s *SeatService) ConfirmPayment(seatID, eventID, userID uint, amount int64) *apperrors.AppError {
-	// شروع تراکنش دیتابیس
-	err := s.repo.ConfirmPayment(seatID,eventID,userID,amount)
-	// نگاشت خطاهای تراکنش به پاسخ‌های کاستوم API
+func (s *SeatService) ConfirmPayment(seatID, eventID, userID uint, amount int64) (*models.Ticket, *apperrors.AppError) {
+
+	ticketRef := ticket.GenerateTicketRef()
+
+	
+	ticket, err := s.repo.ExecutePaymentTransaction(seatID, eventID, userID, amount, ticketRef)
+	
 	if err != nil {
 		switch err.Error() {
 		case "seat_not_found":
-			return &apperrors.AppError{StatusCode: 404, Message: "صندلی مورد نظر یافت نشد"}
+			return nil, &apperrors.AppError{StatusCode: 404, Message: "Not found"}
 		case "not_your_reservation":
-			return &apperrors.AppError{StatusCode: 400, Message: "این صندلی در رزرو شما نیست یا قبلاً فروخته شده است"}
+			return nil, &apperrors.AppError{StatusCode: 400, Message: "This seat is not reserved by you or has already been sold"}
 		case "reservation_expired":
-			return &apperrors.AppError{StatusCode: 410, Message: "مهلت ۱۰ دقیقه‌ای رزرو شما به پایان رسیده است"}
+			return nil, &apperrors.AppError{StatusCode: 410, Message: "The reservation time limit of 10 minutes has expired. Please reserve the seat again."}
 		default:
-			return &apperrors.AppError{StatusCode: 500, Message: "خطای داخلی سرور در پردازش پرداخت"}
+			return nil, &apperrors.AppError{StatusCode: 500, Message: "Internal error"}
 		}
 	}
 
-	return nil
+	return ticket, nil
 }
+

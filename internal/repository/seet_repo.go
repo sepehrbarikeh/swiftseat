@@ -1,10 +1,7 @@
 package repository
 
 import (
-	"crypto/rand"
 	"errors"
-	"fmt"
-	"math/big"
 	"time"
 
 	"swift-seat/internal/models"
@@ -68,55 +65,65 @@ func (p *PostgresDB) CleanupExpiredSeats() (int64, error) {
 
 }
 
-func (p *PostgresDB) ConfirmPayment(seatID, eventID, userID uint, amount int64) error {
+// فرض می‌کنیم این متد به اینترفیس یا استراکت SeatRepository اضافه میشه
+func (p *PostgresDB) ExecutePaymentTransaction(seatID, eventID, userID uint, amount int64, ticketRef string) (*models.Ticket, error) {
+	var ticket models.Ticket
+
 	err := p.DB.Transaction(func(tx *gorm.DB) error {
 		var status models.SeatStatus
 
-		// ۱. پیدا کردن صندلی و قفل کردن آن برای این تراکنش
+		// ۱. قفل کردن سطر صندلی برای جلوگیری از Race Condition
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("seat_id = ? AND event_id = ?", seatID, eventID).
 			First(&status).Error
 		if err != nil {
-			return fmt.Errorf("seat_not_found")
+			return errors.New("seat_not_found")
 		}
 
-		// ۲. اعتبارسنجی وضعیت صندلی
+		// ۲. اعتبارسنجی وضعیت رزرو صندلی
 		if status.Status != "reserved" || status.ReservedBy == nil || *status.ReservedBy != userID {
-			return fmt.Errorf("not_your_reservation")
+			return errors.New("not_your_reservation")
 		}
-
 		if status.ExpiresAt != nil && status.ExpiresAt.Before(time.Now()) {
-			return fmt.Errorf("reservation_expired")
+			return errors.New("reservation_expired")
 		}
 
-		// ۳. تغییر وضعیت صندلی به فروخته شده
+		// ۳. قطعی کردن خرید صندلی
 		status.Status = "sold"
-		status.ExpiresAt = nil // ددلاین پاک می‌شود چون خرید قطعی شده
+		status.ExpiresAt = nil
 		if err := tx.Save(&status).Error; err != nil {
 			return err
 		}
 
-		// ۴. صدور بلیت نهایی و تولید کد پیگیری رندوم
-		ticketRef := generateTicketRef()
-		ticket := models.Ticket{
+		// ۴. ایجاد رکورد بلیت
+		ticket = models.Ticket{
 			SeatID:     seatID,
 			EventID:    eventID,
 			UserID:     userID,
 			TicketRef:  ticketRef,
 			PaidAmount: amount,
 		}
-
 		if err := tx.Create(&ticket).Error; err != nil {
 			return err
 		}
 
 		return nil
 	})
-	return err
+
+	if err != nil {
+		return nil, err
+	}
+
+	// ۵. حالا که تراکنش موفق بود، روابط (Relationships) رو لود می‌کنیم
+	err = p.DB.
+		Preload("Event").
+		Preload("Seat").
+		First(&ticket, ticket.ID).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ticket, nil
 }
 
-// تابع کمکی برای تولید کد پیگیری امن و رندوم
-func generateTicketRef() string {
-	n, _ := rand.Int(rand.Reader, big.NewInt(900000))
-	return fmt.Sprintf("TIC-%d", n.Int64()+100000) // نمونه: TIC-548329
-}

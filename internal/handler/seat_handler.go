@@ -52,22 +52,30 @@ func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
 func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
 	var req ConfirmPaymentRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
-	}
-
-	if req.SeatID == 0 || req.EventID == 0 || req.Amount <= 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "seat_id, event_id and amount are required"})
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "فرمت درخواست نامعتبر است"})
 	}
 
 	userID := c.Locals("userID").(uint)
 
-	appErr := h.svc.ConfirmPayment(req.SeatID, req.EventID, userID, req.Amount)
+	// صدا زدن سرویس اصلاح شده
+	ticket, appErr := h.svc.ConfirmPayment(req.SeatID, req.EventID, userID, req.Amount)
 	if appErr != nil {
 		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
+	// برگرداندن شناسنامه کامل بلیت به کلاینت
 	return c.Status(http.StatusOK).JSON(fiber.Map{
-		"message": "Payment confirmed successfully and your ticket has been issued",
 		"status":  "success",
+		"message": "Payment has been successfully.",
+		"ticket": fiber.Map{
+			"ticket_ref":   ticket.TicketRef,   
+			"paid_amount":  ticket.PaidAmount,  
+			"issued_at":    ticket.CreatedAt,   
+			"seat_number":  ticket.Seat.ID, 
+			"row_number":   ticket.Seat.RowName,   
+			"event_title":  ticket.Event.Title, 
+			"singer_name":  ticket.Event.Title,
+			"hall_name":    ticket.Event.Location, 
+		},
 	})
-} 
+}

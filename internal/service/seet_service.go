@@ -2,13 +2,13 @@ package service
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"swift-seat/internal/models"
 	"swift-seat/internal/pkg/apperrors"
 	"swift-seat/internal/pkg/ticket"
 	"swift-seat/internal/repository"
-
 )
 
 type SeatService struct {
@@ -22,7 +22,14 @@ type SeatResponseDTO struct {
     RowName    string  `json:"row_name"`
     Price      float64 `json:"price"`
     Status     string  `json:"status"`
-    ReservedBy *uint   `json:"reserved_by,omitempty"` // 👈 فقط آیدی عددی که فرانت خودش مقایسه کنه
+}
+
+type PaginatedEventsResponse struct {
+    TotalItems  int64          `json:"total_items"`
+    TotalPages  int            `json:"total_pages"`
+    CurrentPage int            `json:"current_page"`
+    Limit       int            `json:"limit"`
+    Events      []models.Event `json:"events"`
 }
 
 func NewSeatService(repo *repository.PostgresDB, seatLockDuration time.Duration) *SeatService {
@@ -113,4 +120,42 @@ func (s *SeatService) GetEventSeatMap(eventID uint) ([]SeatResponseDTO, *apperro
     }
 
     return seatMap, nil
+}
+
+
+func (s *SeatService) GetEventsList(page, limit int, search, location string) (*PaginatedEventsResponse, *apperrors.AppError) {
+    // ست کردن مقادیر پیش‌فرض در صورت نامعتبر بودن ورودی‌ها
+    if page <= 0 {
+        page = 1
+    }
+    if limit <= 0 {
+        limit = 10
+    }
+
+	search = NormalizePersianString(search)
+
+    events, totalItems, err := s.repo.GetPaginatedEvents(page, limit, search, location)
+    if err != nil {
+        return nil, apperrors.New(http.StatusInternalServerError, "Failed to retrieve events", err)
+    }
+
+    // محاسبه تعداد کل صفحات
+    totalPages := int((totalItems + int64(limit) - 1) / int64(limit))
+
+    return &PaginatedEventsResponse{
+        TotalItems:  totalItems,
+        TotalPages:  totalPages,
+        CurrentPage: page,
+        Limit:       limit,
+        Events:      events,
+    }, nil
+}
+
+
+
+func NormalizePersianString(s string) string {
+    // تبدیل ی و ک عربی به فارسی
+    s = strings.ReplaceAll(s, "ي", "ی")
+    s = strings.ReplaceAll(s, "ك", "ک")
+    return strings.TrimSpace(s)
 }

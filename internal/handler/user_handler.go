@@ -26,6 +26,16 @@ func NewUserHandler(svc *service.UserService) *UserHandler {
 	return &UserHandler{svc: svc}
 }
 
+// @Summary Register a new user
+// @Description Register a new user account
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param user body RegisterDTO true "User registration"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 409 {object} map[string]interface{}
+// @Router /api/register [post]
 func (h *UserHandler) Register(c *fiber.Ctx) error {
 	var req RegisterDTO
 
@@ -51,6 +61,16 @@ func (h *UserHandler) Register(c *fiber.Ctx) error {
 	})
 }
 
+// @Summary Login user
+// @Description Authenticate a user and return a JWT token
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param credentials body LoginDTO true "Login request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/login [post]
 func (h *UserHandler) Login(c *fiber.Ctx) error {
 	var req LoginDTO
 

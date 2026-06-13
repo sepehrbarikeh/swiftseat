@@ -2,7 +2,7 @@ package repository
 
 import (
 	"errors"
-	
+
 	"time"
 
 	"swift-seat/internal/models"
@@ -16,19 +16,18 @@ func (p *PostgresDB) ReserveSeatWithLock(seatNumber string, eventID uint, userID
 		var status models.SeatStatus
 
 		// ۱. پیدا کردن اطلاعات و آیدی اصلی صندلی
-        var seat models.Seat
-        if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
-            return errors.New("gorm: record not found")
-        }
+		var seat models.Seat
+		if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
+			return errors.New("gorm: record not found")
+		}
 
-	
-        err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-            Where("seat_id = ? AND event_id = ?", seat.ID, eventID).
-            First(&status).Error
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("seat_id = ? AND event_id = ?", seat.ID, eventID).
+			First(&status).Error
 
-        if err != nil {
-            return err
-        }
+		if err != nil {
+			return err
+		}
 
 		now := time.Now()
 		if status.Status == "sold" {
@@ -79,17 +78,17 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userI
 		var status models.SeatStatus
 
 		var seat models.Seat
-        if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
-            return errors.New("seat_not_found")
-        }
+		if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
+			return errors.New("seat_not_found")
+		}
 
 		// ۱. قفل کردن سطر صندلی برای جلوگیری از Race Condition
-        err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-            Where("seat_id = ? AND event_id = ?", seat.ID, eventID).
-            First(&status).Error
-        if err != nil {
-            return errors.New("seat_not_found")
-        }
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("seat_id = ? AND event_id = ?", seat.ID, eventID).
+			First(&status).Error
+		if err != nil {
+			return errors.New("seat_not_found")
+		}
 
 		// ۲. اعتبارسنجی وضعیت رزرو صندلی
 		if status.Status != "reserved" || status.ReservedBy == nil || *status.ReservedBy != userID {
@@ -144,35 +143,66 @@ func (p *PostgresDB) BulkCreateSeatStatuses(statuses []models.SeatStatus) error 
 	return p.DB.CreateInBatches(&statuses, 100).Error
 }
 
-
 func (p *PostgresDB) GetUserTickets(userID uint) ([]models.Ticket, error) {
-    var tickets []models.Ticket
-  
-	
-    err := p.DB.
-        Preload("Event").
-        Preload("Seat").
-        Where("user_id = ?", userID).
-        Order("created_at DESC").
-        Find(&tickets).Error
+	var tickets []models.Ticket
 
-    if err != nil {
-        return nil, err
-    }
-    return tickets, nil
+	err := p.DB.
+		Preload("Event").
+		Preload("Seat").
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Find(&tickets).Error
+
+	if err != nil {
+		return nil, err
+	}
+	return tickets, nil
 }
 
 func (p *PostgresDB) GetEventSeatsWithStatus(eventID uint) ([]models.SeatStatus, error) {
-    var statuses []models.SeatStatus
+	var statuses []models.SeatStatus
 
+	err := p.DB.
+		Preload("Seat").
+		Where("event_id = ?", eventID).
+		Find(&statuses).Error
 
-    err := p.DB.
-        Preload("Seat").
-        Where("event_id = ?", eventID).
-        Find(&statuses).Error
+	if err != nil {
+		return nil, err
+	}
+	return statuses, nil
+}
 
-    if err != nil {
-        return nil, err
-    }
-    return statuses, nil
+func (p *PostgresDB) GetPaginatedEvents(page, limit int, search, location string) ([]models.Event, int64, error) {
+	var events []models.Event
+	var total int64
+
+	// ایجاد یک کوئری پایه روی مدل ایونت
+	query := p.DB.Model(&models.Event{})
+
+	// ۱. اعمال سرچ اختیاری روی عنوان (Case-Insensitive)
+	if search != "" {
+		searchTerm := "%" + search + "%"
+		// سرچ هم‌زمان روی عنوان یا لوکیشن ایونت
+		query = query.Where("title ILIKE ? OR location ILIKE ?", searchTerm, searchTerm)
+	}
+
+	// ۲. اعمال فیلتر اختیاری روی مکان
+	if location != "" {
+		query = query.Where("location = ?", location)
+	}
+
+	// ۳. گرفتن تعداد کل رکوردها با فیلترهای اعمال شده (برای متادیتای فرانت‌آند)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// ۴. اعمال صفحه‌بندی و دریافت دیتا
+	offset := (page - 1) * limit
+	err := query.Offset(offset).Limit(limit).Order("created_at DESC").Find(&events).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return events, total, nil
 }

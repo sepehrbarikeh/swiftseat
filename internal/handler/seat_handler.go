@@ -18,116 +18,185 @@ func NewSeatHandler(svc *service.SeatService) *SeatHandler {
 
 // ساختار رکوئست را تمیز می‌کنیم (دیگر نیازی به user_id در بدنه نیست)
 type ReserveSeatRequest struct {
-    SeatNumber string `json:"seat_number"` // 🚀 یکپارچه‌سازی با ساختار جدید
-    EventID    uint   `json:"event_id"`
+	SeatNumber string `json:"seat_number"` // 🚀 یکپارچه‌سازی با ساختار جدید
+	EventID    uint   `json:"event_id"`
 }
 
 type ConfirmPaymentRequest struct {
-    SeatNumber string `json:"seat_number"`
-    EventID    uint   `json:"event_id"`
-    Amount     int64  `json:"amount"`
+	SeatNumber string `json:"seat_number"`
+	EventID    uint   `json:"event_id"`
+	Amount     int64  `json:"amount"`
 }
+
+// @Summary Reserve a seat
+// @Description Temporarily reserve a seat before payment
+// @Tags Seats
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param reservation body ReserveSeatRequest true "Seat reservation"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/seats/reserve [post]
 func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
-    var req ReserveSeatRequest
+	var req ReserveSeatRequest
 
-    if err := c.BodyParser(&req); err != nil {
-        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad request"})
-    }
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad request"})
+	}
 
-    if req.SeatNumber == "" || req.EventID == 0 {
-        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "seat_number and event_id are required"})
-    }
+	if req.SeatNumber == "" || req.EventID == 0 {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "seat_number and event_id are required"})
+	}
 
-    userID := c.Locals("userID").(uint)
+	userID := c.Locals("userID").(uint)
 
-    appErr := h.svc.HoldSeat(req.SeatNumber, req.EventID, userID)
-    if appErr != nil {
-        return c.Status(appErr.StatusCode).JSON(appErr)
-    }
+	appErr := h.svc.HoldSeat(req.SeatNumber, req.EventID, userID)
+	if appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
+	}
 
-    return c.Status(http.StatusOK).JSON(fiber.Map{
-        "message": "Seat successfully reserved for 10 minutes",
-    })
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"message": "Seat successfully reserved for 10 minutes",
+	})
 }
 
+// @Summary Confirm payment
+// @Description Confirm payment for a reserved seat and issue a ticket
+// @Tags Seats
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param payment body ConfirmPaymentRequest true "Payment confirmation"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/seats/confirm-payment [post]
 func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
-    var req ConfirmPaymentRequest
-    if err := c.BodyParser(&req); err != nil {
-        fmt.Println(req)
-        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
-    }
+	var req ConfirmPaymentRequest
+	if err := c.BodyParser(&req); err != nil {
+		fmt.Println(req)
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
+	}
 
-    userID := c.Locals("userID").(uint)
+	userID := c.Locals("userID").(uint)
 
-    ticket, appErr := h.svc.ConfirmPayment(req.SeatNumber, req.EventID, userID, req.Amount)
-    if appErr != nil {
-        return c.Status(appErr.StatusCode).JSON(appErr)
-    }
+	ticket, appErr := h.svc.ConfirmPayment(req.SeatNumber, req.EventID, userID, req.Amount)
+	if appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
+	}
 
-    return c.Status(http.StatusOK).JSON(fiber.Map{
-        "status":  "success",
-        "message": "Payment has been successful.",
-        "ticket": fiber.Map{
-            "ticket_ref":   ticket.TicketRef,   
-            "paid_amount":  ticket.PaidAmount,  
-            "issued_at":    ticket.CreatedAt,   
-            "seat_number":  ticket.Seat.SeatNumber,
-            "row_number":   ticket.Seat.RowName,   
-            "event_title":  ticket.Event.Title, 
-            "singer_name":  ticket.Event.Title,
-            "hall_name":    ticket.Event.Location, 
-        },
-    })
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Payment has been successful.",
+		"ticket": fiber.Map{
+			"ticket_ref":  ticket.TicketRef,
+			"paid_amount": ticket.PaidAmount,
+			"issued_at":   ticket.CreatedAt,
+			"seat_number": ticket.Seat.SeatNumber,
+			"row_number":  ticket.Seat.RowName,
+			"event_title": ticket.Event.Title,
+			"singer_name": ticket.Event.Title,
+			"hall_name":   ticket.Event.Location,
+		},
+	})
 }
 
-
+// @Summary Get current user's tickets
+// @Description Retrieve tickets for the authenticated user
+// @Tags Tickets
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/tickets/my [get]
 func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
-    // استخراج آیدی کاربر از توکن JWT
-    userID := c.Locals("userID").(uint)
+	// استخراج آیدی کاربر از توکن JWT
+	userID := c.Locals("userID").(uint)
 
-    tickets, appErr := h.svc.GetUserTickets(userID)
-    if appErr != nil {
-        return c.Status(appErr.StatusCode).JSON(appErr)
-    }
+	tickets, appErr := h.svc.GetUserTickets(userID)
+	if appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
+	}
 
-    // فرمت کردن دیتای خروجی برای اینکه فرانت‌آند راحت‌ترین ساختار رو داشته باشه
-    var formattedTickets []fiber.Map
-    for _, t := range tickets {
-        formattedTickets = append(formattedTickets, fiber.Map{
-            "ticket_ref":   t.TicketRef,
-            "paid_amount":  t.PaidAmount,
-            "issued_at":    t.CreatedAt,
-            "seat_number":  t.Seat.SeatNumber,
-            "row_name":     t.Seat.RowName,
-            "event_title":  t.Event.Title,
-            "location":     t.Event.Location,
-            "event_id":     t.Event.ID,
-            "event_date":   t.Event.CreatedAt, // یا هر فیلد تاریخی که در مدل ایونت داری
-        })
-    }
+	// فرمت کردن دیتای خروجی برای اینکه فرانت‌آند راحت‌ترین ساختار رو داشته باشه
+	var formattedTickets []fiber.Map
+	for _, t := range tickets {
+		formattedTickets = append(formattedTickets, fiber.Map{
+			"ticket_ref":  t.TicketRef,
+			"paid_amount": t.PaidAmount,
+			"issued_at":   t.CreatedAt,
+			"seat_number": t.Seat.SeatNumber,
+			"row_name":    t.Seat.RowName,
+			"event_title": t.Event.Title,
+			"location":    t.Event.Location,
+			"event_id":    t.Event.ID,
+			"event_date":  t.Event.CreatedAt, // یا هر فیلد تاریخی که در مدل ایونت داری
+		})
+	}
 
-    return c.Status(http.StatusOK).JSON(fiber.Map{
-        "status":  "success",
-        "count":   len(formattedTickets),
-        "tickets": formattedTickets,
-    })
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"status":  "success",
+		"count":   len(formattedTickets),
+		"tickets": formattedTickets,
+	})
 }
 
+// @Summary Get seat map
+// @Description Get the seat map for an event
+// @Tags Seats
+// @Accept json
+// @Produce json
+// @Param event_id path int true "Event ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/events/{event_id}/seats [get]
 func (h *SeatHandler) GetSeatMap(c *fiber.Ctx) error {
-    eventID, err := c.ParamsInt("event_id")
-    if err != nil || eventID <= 0 {
-        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid event id"})
-    }
+	eventID, err := c.ParamsInt("event_id")
+	if err != nil || eventID <= 0 {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid event id"})
+	}
 
-    // صدا زدن سرویس بدون نیاز به هیچ دیتای کاربری
-    seatMap, appErr := h.svc.GetEventSeatMap(uint(eventID))
-    if appErr != nil {
-        return c.Status(appErr.StatusCode).JSON(appErr)
-    }
+	// صدا زدن سرویس بدون نیاز به هیچ دیتای کاربری
+	seatMap, appErr := h.svc.GetEventSeatMap(uint(eventID))
+	if appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
+	}
 
-    return c.Status(http.StatusOK).JSON(fiber.Map{
-        "status":   "success",
-        "event_id": eventID,
-        "seats":    seatMap,
-    })
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"status":   "success",
+		"event_id": eventID,
+		"seats":    seatMap,
+	})
+}
+
+// @Summary Search events
+// @Description List events with optional pagination and filtering
+// @Tags Events
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Page size" default(10)
+// @Param search query string false "Search term"
+// @Param location query string false "Location filter"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/events [get]
+func (h *SeatHandler) GetEvents(c *fiber.Ctx) error {
+	// خواندن کوئری پارامترها با مقادیر پیش‌فرض فایبر
+	page := c.QueryInt("page", 1)
+	limit := c.QueryInt("limit", 10)
+	search := c.Query("search", "")
+	location := c.Query("location", "")
+
+	res, appErr := h.svc.GetEventsList(page, limit, search, location)
+	if appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"status": "success",
+		"data":   res,
+	})
 }

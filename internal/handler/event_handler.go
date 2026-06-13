@@ -18,6 +18,17 @@ type CreateEventRequest struct {
 	SeatsPerRow int    `json:"seats_per_row"`
 }
 
+// @Summary Create an event
+// @Description Create a new event in the system
+// @Tags Events
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param event body CreateEventRequest true "Event payload"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/events [post]
 func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 	var req CreateEventRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -25,27 +36,27 @@ func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 	}
 
 	if req.Title == "" || req.Location == "" {
-	return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-		"error":  "Event title and location cannot be empty",
-	})
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"error": "Event title and location cannot be empty",
+		})
 	}
 	if req.Rows <= 0 || req.SeatsPerRow <= 0 {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-		"error":  "Number of rows and seats must be greater than zero",
-	})
+			"error": "Number of rows and seats must be greater than zero",
+		})
 	}
 
 	parsedTime, err := time.Parse(time.RFC3339, req.StartTime)
 	if err != nil {
-		 return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-		"error":  "Invalid date format",
-	})
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid date format",
+		})
 	}
 
 	if parsedTime.Before(time.Now()) {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-		"error":  "he time of the event cannot be in the past.",
-	})
+			"error": "he time of the event cannot be in the past.",
+		})
 	}
 	dto := service.CreateEventDTO{
 		Title:       req.Title,
@@ -69,15 +80,15 @@ func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 
 func (h *EventHandler) GetEvents(c *fiber.Ctx) error {
 
-    ctx := c.UserContext() 
+	ctx := c.UserContext()
 
-    events, source, err := h.svc.GetActiveEvents(ctx)
-    if err != nil {
-        return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "خطا در دریافت لیست رویدادها"})
-    }
+	events, source, err := h.svc.GetActiveEvents(ctx)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "خطا در دریافت لیست رویدادها"})
+	}
 
-    return c.Status(http.StatusOK).JSON(fiber.Map{
-        "source": source, // 
-        "data":   events,
-    })
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"source": source, //
+		"data":   events,
+	})
 }

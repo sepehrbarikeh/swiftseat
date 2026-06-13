@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
+	fiberSwagger "github.com/swaggo/fiber-swagger"
 )
 
 func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandler *handlers.SeatHandler, userHandler handlers.UserHandler, middleware *middleware.AuthMiddleware) {
@@ -30,18 +31,23 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 		},
 	})
 
-	
+		// Swagger UI
+	app.Get("/swagger/*", fiberSwagger.WrapHandler)
+
+
 	api := app.Group("/api")
 
 	api.Get("/events/:event_id/seats", seatHandler.GetSeatMap)
-	secured := api.Group("/", middleware.AuthRequired())
 
 	// user routes //
 	api.Post("/register", userHandler.Register)
 	api.Post("/login", userHandler.Login)
 
 	// events routes //
-	api.Get("/events", eventHandler.GetEvents)
+	api.Get("/events", seatHandler.GetEvents)
+
+	secured := api.Group("/", middleware.AuthRequired())
+
 	secured.Post("/events", eventHandler.CreateEvent)
 
 	// seats routes

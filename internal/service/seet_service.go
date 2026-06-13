@@ -38,3 +38,25 @@ func (s *SeatService) HoldSeat(seatID uint, eventID uint, userID uint) *apperror
 
 	return nil
 }
+
+
+// ConfirmPayment فرآیند پرداخت و خرید قطعی صندلی را مدیریت می‌کند
+func (s *SeatService) ConfirmPayment(seatID, eventID, userID uint, amount int64) *apperrors.AppError {
+	// شروع تراکنش دیتابیس
+	err := s.repo.ConfirmPayment(seatID,eventID,userID,amount)
+	// نگاشت خطاهای تراکنش به پاسخ‌های کاستوم API
+	if err != nil {
+		switch err.Error() {
+		case "seat_not_found":
+			return &apperrors.AppError{StatusCode: 404, Message: "صندلی مورد نظر یافت نشد"}
+		case "not_your_reservation":
+			return &apperrors.AppError{StatusCode: 400, Message: "این صندلی در رزرو شما نیست یا قبلاً فروخته شده است"}
+		case "reservation_expired":
+			return &apperrors.AppError{StatusCode: 410, Message: "مهلت ۱۰ دقیقه‌ای رزرو شما به پایان رسیده است"}
+		default:
+			return &apperrors.AppError{StatusCode: 500, Message: "خطای داخلی سرور در پردازش پرداخت"}
+		}
+	}
+
+	return nil
+}

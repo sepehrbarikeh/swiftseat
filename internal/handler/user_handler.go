@@ -1,0 +1,77 @@
+package handlers
+
+import (
+	"net/http"
+	"swift-seat/internal/service"
+
+	"github.com/gofiber/fiber/v2"
+)
+
+type UserHandler struct {
+	svc *service.UserService
+}
+
+type RegisterDTO struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type LoginDTO struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func NewUserHandler(svc *service.UserService) *UserHandler {
+	return &UserHandler{svc: svc}
+}
+
+func (h *UserHandler) Register(c *fiber.Ctx) error {
+	var req RegisterDTO
+
+	// پارس کردن جی‌سان ورودی
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
+	}
+
+	// ولیدیشن ساده الزامی بودن فیلدها
+	if req.Name == "" || req.Email == "" || req.Password == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "All fields (name, email, and password) are required."})
+	}
+
+	// صدا زدن لایه سرویس
+	if err := h.svc.Register(req.Name, req.Email, req.Password); err != nil {
+		// معمولاً ارور دیتابیس به خاطر ایمیل تکراری رخ میده
+		return c.Status(http.StatusConflict).JSON(fiber.Map{"error": "Registration failed. This email address is probably already registered."})
+	}
+
+	return c.Status(http.StatusCreated).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Your account has been successfully created.",
+	})
+}
+
+func (h *UserHandler) Login(c *fiber.Ctx) error {
+	var req LoginDTO
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
+	}
+
+	if req.Email == "" || req.Password == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "email and password is required."})
+	}
+
+	// صدا زدن لایه سرویس برای تایید هویت و گرفتن توکن JWT
+	token, err := h.svc.Login(req.Email, req.Password)
+	if err != nil {
+		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// برگرداندن توکن به همراه نوع آن برای فرانت‌آند
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"status": "success",
+		"token":  token,
+		"type":   "Bearer",
+	})
+}

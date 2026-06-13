@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
-	"github.com/gofiber/fiber/v2"
 	"swift-seat/internal/service"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type SeatHandler struct {
@@ -27,33 +29,36 @@ type ConfirmPaymentRequest struct {
 }
 
 func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
-	var req ReserveSeatRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
-	}
+    var req ReserveSeatRequest
 
-	if req.SeatID == 0 || req.EventID == 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "seat_id and event_id are required"})
-	}
+    // 🚀 این خط جا افتاده بود؛ برای خواندن دیتای ارسالی از کلاینت
+    if err := c.BodyParser(&req); err != nil {
+        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad request"})
+    }
 
-	// استخراج امنِ آی‌دی کاربر از میدل‌ور
-	userID := c.Locals("userID").(uint)
+    if req.SeatID == 0 || req.EventID == 0 {
+        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "seat_id and event_id are required"})
+    }
 
-	appErr := h.svc.HoldSeat(req.SeatID, req.EventID, userID)
-	if appErr != nil {
-		return c.Status(appErr.StatusCode).JSON(appErr)
-	}
+    userID := c.Locals("userID").(uint)
 
-	return c.Status(http.StatusOK).JSON(fiber.Map{
-		"message": "Seat successfully reserved for 10 minutes",
-	})
+    appErr := h.svc.HoldSeat(req.SeatID, req.EventID, userID)
+    if appErr != nil {
+        return c.Status(appErr.StatusCode).JSON(appErr)
+    }
+
+    return c.Status(http.StatusOK).JSON(fiber.Map{
+        "message": "Seat successfully reserved for 10 minutes",
+    })
 }
 
 func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
 	var req ConfirmPaymentRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "فرمت درخواست نامعتبر است"})
+		fmt.Println(req)
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
 	}
+
 
 	userID := c.Locals("userID").(uint)
 

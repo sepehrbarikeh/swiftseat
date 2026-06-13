@@ -24,27 +24,30 @@ func main() {
 	// Initialize the database connection
 	db := repository.InitDB(cfg)
 
-	Token := token.New(cfg.JWTSecret)
+	token := token.New(cfg.JWTSecret)
 
-	fmt.Println(Token.GenerateToken(42))
 
 	fmt.Println("💾 Database connection established:", db.DB)
 	fmt.Println("💎 The SwiftSeat engine is ready for use.")
 
 	rds := database.InitRedis()
 
-
 	cronWorker := worker.NewCleanupWorker(db, cfg.CleanupInterval)
 	cronWorker.Start()
 
-	eventSvc := service.NewEventService(db, &wg,rds)
+	// user service
+	userSvc := service.NewUserService(db,token)
+	userHandler := handlers.NewUserHandler(userSvc)
+	// event services
+	eventSvc := service.NewEventService(db, &wg, rds)
 	eventHandler := handlers.NewEventHandler(eventSvc)
 
+	// seat service
 	seatSvc := service.NewSeatService(db, cfg.SeetLock)
 	seetHandler := handlers.NewSeatHandler(seatSvc)
 
-	authMiddlaware := middleware.NewAuthMiddleware(Token)
-	server := server.NewServer(cfg.AppPort, &wg, eventHandler, seetHandler, authMiddlaware)
+	authMiddlaware := middleware.NewAuthMiddleware(token)
+	server := server.NewServer(cfg.AppPort, &wg, eventHandler, userHandler, seetHandler, authMiddlaware)
 	server.StartServer()
 
 }

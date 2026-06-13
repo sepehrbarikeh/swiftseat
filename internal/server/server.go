@@ -16,29 +16,30 @@ import (
 )
 
 type Server struct {
-	port       string
-	wg   *sync.WaitGroup 
-	eventHandler *handlers.EventHandler
-	seatHandler *handlers.SeatHandler
+	port           string
+	wg             *sync.WaitGroup
+	eventHandler   *handlers.EventHandler
+	seatHandler    *handlers.SeatHandler
 	authMiddleware *middleware.AuthMiddleware
+	userHandler    *handlers.UserHandler
 }
 
-func NewServer(port string,wg   *sync.WaitGroup ,eventHandler *handlers.EventHandler,seatHandler *handlers.SeatHandler,authMiddleware *middleware.AuthMiddleware) *Server {
+func NewServer(port string, wg *sync.WaitGroup, eventHandler *handlers.EventHandler, userHandler *handlers.UserHandler, seatHandler *handlers.SeatHandler, authMiddleware *middleware.AuthMiddleware) *Server {
 	return &Server{
-		port: port,
-		wg: wg,
-		eventHandler: eventHandler,
-		seatHandler: seatHandler,
+		port:           port,
+		wg:             wg,
+		eventHandler:   eventHandler,
+		seatHandler:    seatHandler,
 		authMiddleware: authMiddleware,
+		userHandler:    userHandler,
 	}
 }
-
 
 func (s *Server) StartServer() {
 
 	shutdownChan := make(chan os.Signal, 1)
-    signal.Notify(shutdownChan, os.Interrupt, syscall.SIGTERM)
-	
+	signal.Notify(shutdownChan, os.Interrupt, syscall.SIGTERM)
+
 	app := fiber.New()
 
 	app.Use(cors.New(cors.Config{
@@ -47,26 +48,24 @@ func (s *Server) StartServer() {
 		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
 	}))
 
-	router.SetupRoutes(app,s.eventHandler,s.seatHandler,s.authMiddleware)
-	
-	fmt.Println("💎 SwiftSeat Server is running on port",s.port)
+	router.SetupRoutes(app, s.eventHandler, s.seatHandler, *s.userHandler, s.authMiddleware)
+
+	fmt.Println("💎 SwiftSeat Server is running on port", s.port)
 	go func() {
-        if err := app.Listen(":" + s.port); err != nil {
-            log.Printf("Server error: %v", err)
-        }
-    }()
+		if err := app.Listen(":" + s.port); err != nil {
+			log.Printf("Server error: %v", err)
+		}
+	}()
 
 	<-shutdownChan
-    log.Println("Shutting down Fiber server...")
+	log.Println("Shutting down Fiber server...")
 
-	
-    if err := app.Shutdown(); err != nil {
-        log.Printf("Fiber shutdown error: %v", err)
-    }
+	if err := app.Shutdown(); err != nil {
+		log.Printf("Fiber shutdown error: %v", err)
+	}
 
-    
-    log.Println("Waiting for background tasks to complete safely...")
-    s.wg.Wait() 
+	log.Println("Waiting for background tasks to complete safely...")
+	s.wg.Wait()
 
-    log.Println("All systems cleanly stopped. Goodbye!")
+	log.Println("All systems cleanly stopped. Goodbye!")
 }

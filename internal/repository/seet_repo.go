@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	
 	"time"
 
 	"swift-seat/internal/models"
@@ -65,7 +66,6 @@ func (p *PostgresDB) CleanupExpiredSeats() (int64, error) {
 
 }
 
-// فرض می‌کنیم این متد به اینترفیس یا استراکت SeatRepository اضافه میشه
 func (p *PostgresDB) ExecutePaymentTransaction(seatID, eventID, userID uint, amount int64, ticketRef string) (*models.Ticket, error) {
 	var ticket models.Ticket
 

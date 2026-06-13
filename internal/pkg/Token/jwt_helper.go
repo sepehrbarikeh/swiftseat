@@ -20,11 +20,12 @@ func New(secretKey string) *Token {
 
 type JWTClaims struct {
 	UserID uint `json:"user_id"`
+	Role string `json:"role"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken یک توکن جدید با عمر ۷ روز برای کاربر می‌سازد
-func (t Token) GenerateToken(userID uint) (string, error) {
+func (t Token) GenerateToken(userID uint,role string) (string, error) {
 	claims := JWTClaims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{

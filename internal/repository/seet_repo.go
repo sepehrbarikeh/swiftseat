@@ -144,6 +144,7 @@ func (p *PostgresDB) BulkCreateSeatStatuses(statuses []models.SeatStatus) error 
 	return p.DB.CreateInBatches(&statuses, 100).Error
 }
 
+
 func (p *PostgresDB) GetUserTickets(userID uint) ([]models.Ticket, error) {
     var tickets []models.Ticket
   
@@ -159,4 +160,19 @@ func (p *PostgresDB) GetUserTickets(userID uint) ([]models.Ticket, error) {
         return nil, err
     }
     return tickets, nil
+}
+
+func (p *PostgresDB) GetEventSeatsWithStatus(eventID uint) ([]models.SeatStatus, error) {
+    var statuses []models.SeatStatus
+
+
+    err := p.DB.
+        Preload("Seat").
+        Where("event_id = ?", eventID).
+        Find(&statuses).Error
+
+    if err != nil {
+        return nil, err
+    }
+    return statuses, nil
 }

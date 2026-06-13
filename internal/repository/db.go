@@ -35,13 +35,12 @@ func InitDB(config *config.Config) *PostgresDB {
 
 	fmt.Println("✅ The connection to PostgreSQL was successfully.")
 
-	// عملیات ساخت اتوماتیک جداول بر اساس استراکت‌ها (Auto Migration)
+	
 	err = database.AutoMigrate(
 		&models.User{},
 		&models.Event{},
 		&models.Seat{},
 		&models.SeatStatus{},
-		&models.Booking{},
 		&models.Ticket{},
 	)
 	if err != nil {

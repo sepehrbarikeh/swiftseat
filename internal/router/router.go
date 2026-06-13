@@ -30,7 +30,10 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 		},
 	})
 
+	
 	api := app.Group("/api")
+
+	api.Get("/events/:event_id/seats", seatHandler.GetSeatMap)
 	secured := api.Group("/", middleware.AuthRequired())
 
 	// user routes //

@@ -8,6 +8,7 @@ import (
 	"swift-seat/internal/pkg/apperrors"
 	"swift-seat/internal/pkg/ticket"
 	"swift-seat/internal/repository"
+
 )
 
 type SeatService struct {
@@ -15,7 +16,14 @@ type SeatService struct {
 	seatLockDuration time.Duration
 }
 
-
+type SeatResponseDTO struct {
+    SeatID     uint    `json:"seat_id"`
+    SeatNumber string  `json:"seat_number"`
+    RowName    string  `json:"row_name"`
+    Price      float64 `json:"price"`
+    Status     string  `json:"status"`
+    ReservedBy *uint   `json:"reserved_by,omitempty"` // 👈 فقط آیدی عددی که فرانت خودش مقایسه کنه
+}
 
 func NewSeatService(repo *repository.PostgresDB, seatLockDuration time.Duration) *SeatService {
 	return &SeatService{repo: repo, seatLockDuration: seatLockDuration}
@@ -74,4 +82,35 @@ func (s *SeatService) GetUserTickets(userID uint) ([]models.Ticket, *apperrors.A
         return nil, apperrors.New(http.StatusInternalServerError, "Failed to retrieve user tickets", err)
     }
     return tickets, nil
+}
+
+
+func (s *SeatService) GetEventSeatMap(eventID uint) ([]SeatResponseDTO, *apperrors.AppError) {
+    statuses, err := s.repo.GetEventSeatsWithStatus(eventID)
+    if err != nil {
+        return nil, apperrors.New(http.StatusInternalServerError, "Failed to fetch seat map", err)
+    }
+
+    var seatMap []SeatResponseDTO
+    now := time.Now()
+
+    for _, st := range statuses {
+        currentStatus := st.Status
+
+        if st.Status == "reserved" && st.ExpiresAt != nil && st.ExpiresAt.Before(now) {
+            currentStatus = "available"
+        }
+
+       
+
+        seatMap = append(seatMap, SeatResponseDTO{
+            SeatID:     st.SeatID,
+            SeatNumber: st.Seat.SeatNumber,
+            RowName:    st.Seat.RowName,
+            Price:      st.Seat.Price,
+            Status:     currentStatus,
+        })
+    }
+
+    return seatMap, nil
 }

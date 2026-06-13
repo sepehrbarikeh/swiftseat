@@ -101,6 +101,7 @@ func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
             "row_name":     t.Seat.RowName,
             "event_title":  t.Event.Title,
             "location":     t.Event.Location,
+            "event_id":     t.Event.ID,
             "event_date":   t.Event.CreatedAt, // یا هر فیلد تاریخی که در مدل ایونت داری
         })
     }
@@ -109,5 +110,24 @@ func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
         "status":  "success",
         "count":   len(formattedTickets),
         "tickets": formattedTickets,
+    })
+}
+
+func (h *SeatHandler) GetSeatMap(c *fiber.Ctx) error {
+    eventID, err := c.ParamsInt("event_id")
+    if err != nil || eventID <= 0 {
+        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid event id"})
+    }
+
+    // صدا زدن سرویس بدون نیاز به هیچ دیتای کاربری
+    seatMap, appErr := h.svc.GetEventSeatMap(uint(eventID))
+    if appErr != nil {
+        return c.Status(appErr.StatusCode).JSON(appErr)
+    }
+
+    return c.Status(http.StatusOK).JSON(fiber.Map{
+        "status":   "success",
+        "event_id": eventID,
+        "seats":    seatMap,
     })
 }

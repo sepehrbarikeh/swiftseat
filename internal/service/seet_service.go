@@ -21,11 +21,11 @@ func NewSeatService(repo *repository.PostgresDB, seatLockDuration time.Duration)
 	return &SeatService{repo: repo, seatLockDuration: seatLockDuration}
 }
 
-func (s *SeatService) HoldSeat(seatID uint, eventID uint, userID uint) *apperrors.AppError {
+func (s *SeatService) HoldSeat(SeatNumber string, eventID uint, userID uint) *apperrors.AppError {
 
 	lockDuration := s.seatLockDuration
 
-	err := s.repo.ReserveSeatWithLock(seatID, eventID, userID, lockDuration)
+	err := s.repo.ReserveSeatWithLock(SeatNumber, eventID, userID, lockDuration)
 	if err != nil {
 
 		switch err.Error() {
@@ -44,12 +44,12 @@ func (s *SeatService) HoldSeat(seatID uint, eventID uint, userID uint) *apperror
 }
 
 
-func (s *SeatService) ConfirmPayment(seatID, eventID, userID uint, amount int64) (*models.Ticket, *apperrors.AppError) {
+func (s *SeatService) ConfirmPayment(SeatNumber string, eventID, userID uint, amount int64) (*models.Ticket, *apperrors.AppError) {
 
 	ticketRef := ticket.GenerateTicketRef()
 
 	
-	ticket, err := s.repo.ExecutePaymentTransaction(seatID, eventID, userID, amount, ticketRef)
+	ticket, err := s.repo.ExecutePaymentTransaction(SeatNumber, eventID, userID, amount, ticketRef)
 	
 	if err != nil {
 		switch err.Error() {

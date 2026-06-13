@@ -60,17 +60,18 @@ type Booking struct {
 }
 
 type Ticket struct {
-	ID uint `gorm:"primaryKey" json:"id"`
+    ID uint `gorm:"primaryKey" json:"id"`
 
-	SeatID uint `gorm:"not null" json:"seat_id"`
-	Seat   Seat `gorm:"foreignKey:SeatID" json:"seat"` // 👈 اضافه شد برای رابطه صندلی
+    // 🚀 فیلد SeatID باید برگردد تا رابطه دیتابیسی برقرار شود
+    SeatID     uint `gorm:"not null" json:"seat_id"`
+    Seat       Seat `gorm:"foreignKey:SeatID" json:"seat"` 
 
-	EventID uint  `gorm:"not null" json:"event_id"`
-	Event   Event `gorm:"foreignKey:EventID" json:"event"` // 👈 اضافه شد برای رابطه رویداد
+    EventID    uint  `gorm:"not null" json:"event_id"`
+    Event      Event `gorm:"foreignKey:EventID" json:"event"` 
 
-	UserID     uint           `gorm:"not null" json:"user_id"`
-	TicketRef  string         `gorm:"type:varchar(100);unique;not null" json:"ticket_ref"`
-	PaidAmount int64          `json:"paid_amount"`
-	CreatedAt  time.Time      `json:"created_at"`
-	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+    UserID     uint           `gorm:"not null" json:"user_id"`
+    TicketRef  string         `gorm:"type:varchar(100);unique;not null" json:"ticket_ref"`
+    PaidAmount int64          `json:"paid_amount"`
+    CreatedAt  time.Time      `json:"created_at"`
+    DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
 }

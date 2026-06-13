@@ -18,31 +18,29 @@ func NewSeatHandler(svc *service.SeatService) *SeatHandler {
 
 // ساختار رکوئست را تمیز می‌کنیم (دیگر نیازی به user_id در بدنه نیست)
 type ReserveSeatRequest struct {
-	SeatID  uint `json:"seat_id"`
-	EventID uint `json:"event_id"`
+    SeatNumber string `json:"seat_number"` // 🚀 یکپارچه‌سازی با ساختار جدید
+    EventID    uint   `json:"event_id"`
 }
 
 type ConfirmPaymentRequest struct {
-	SeatID  uint  `json:"seat_id"`
-	EventID uint  `json:"event_id"`
-	Amount  int64 `json:"amount"`
+    SeatNumber string `json:"seat_number"`
+    EventID    uint   `json:"event_id"`
+    Amount     int64  `json:"amount"`
 }
-
 func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
     var req ReserveSeatRequest
 
-    // 🚀 این خط جا افتاده بود؛ برای خواندن دیتای ارسالی از کلاینت
     if err := c.BodyParser(&req); err != nil {
         return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad request"})
     }
 
-    if req.SeatID == 0 || req.EventID == 0 {
-        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "seat_id and event_id are required"})
+    if req.SeatNumber == "" || req.EventID == 0 {
+        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "seat_number and event_id are required"})
     }
 
     userID := c.Locals("userID").(uint)
 
-    appErr := h.svc.HoldSeat(req.SeatID, req.EventID, userID)
+    appErr := h.svc.HoldSeat(req.SeatNumber, req.EventID, userID)
     if appErr != nil {
         return c.Status(appErr.StatusCode).JSON(appErr)
     }
@@ -53,35 +51,31 @@ func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
 }
 
 func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
-	var req ConfirmPaymentRequest
-	if err := c.BodyParser(&req); err != nil {
-		fmt.Println(req)
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
-	}
+    var req ConfirmPaymentRequest
+    if err := c.BodyParser(&req); err != nil {
+        fmt.Println(req)
+        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
+    }
 
+    userID := c.Locals("userID").(uint)
 
-	userID := c.Locals("userID").(uint)
+    ticket, appErr := h.svc.ConfirmPayment(req.SeatNumber, req.EventID, userID, req.Amount)
+    if appErr != nil {
+        return c.Status(appErr.StatusCode).JSON(appErr)
+    }
 
-	// صدا زدن سرویس اصلاح شده
-	ticket, appErr := h.svc.ConfirmPayment(req.SeatID, req.EventID, userID, req.Amount)
-	if appErr != nil {
-		return c.Status(appErr.StatusCode).JSON(appErr)
-	}
-
-	// برگرداندن شناسنامه کامل بلیت به کلاینت
-	return c.Status(http.StatusOK).JSON(fiber.Map{
-		"status":  "success",
-		"message": "Payment has been successfully.",
-		"ticket": fiber.Map{
-			"ticket_ref":   ticket.TicketRef,   
-			"paid_amount":  ticket.PaidAmount,  
-			"issued_at":    ticket.CreatedAt,   
-			"seat_number":  ticket.Seat.ID, 
-			"row_number":   ticket.Seat.RowName,   
-			"event_title":  ticket.Event.Title, 
-			"singer_name":  ticket.Event.Title,
-			"hall_name":    ticket.Event.Location, 
-		},
-	})
+    return c.Status(http.StatusOK).JSON(fiber.Map{
+        "status":  "success",
+        "message": "Payment has been successful.",
+        "ticket": fiber.Map{
+            "ticket_ref":   ticket.TicketRef,   
+            "paid_amount":  ticket.PaidAmount,  
+            "issued_at":    ticket.CreatedAt,   
+            "seat_number":  ticket.Seat.SeatNumber,
+            "row_number":   ticket.Seat.RowName,   
+            "event_title":  ticket.Event.Title, 
+            "singer_name":  ticket.Event.Title,
+            "hall_name":    ticket.Event.Location, 
+        },
+    })
 }
-

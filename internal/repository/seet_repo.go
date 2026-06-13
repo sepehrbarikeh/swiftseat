@@ -11,18 +11,24 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func (p *PostgresDB) ReserveSeatWithLock(seatID uint, eventID uint, userID uint, duration time.Duration) error {
+func (p *PostgresDB) ReserveSeatWithLock(seatNumber string, eventID uint, userID uint, duration time.Duration) error {
 	return p.DB.Transaction(func(tx *gorm.DB) error {
 		var status models.SeatStatus
 
-		// locking for race condition
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("seat_id = ? AND event_id = ?", seatID, eventID).
-			First(&status).Error
+		// ۱. پیدا کردن اطلاعات و آیدی اصلی صندلی
+        var seat models.Seat
+        if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
+            return errors.New("gorm: record not found")
+        }
 
-		if err != nil {
-			return err
-		}
+	
+        err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+            Where("seat_id = ? AND event_id = ?", seat.ID, eventID).
+            First(&status).Error
+
+        if err != nil {
+            return err
+        }
 
 		now := time.Now()
 		if status.Status == "sold" {
@@ -66,19 +72,24 @@ func (p *PostgresDB) CleanupExpiredSeats() (int64, error) {
 
 }
 
-func (p *PostgresDB) ExecutePaymentTransaction(seatID, eventID, userID uint, amount int64, ticketRef string) (*models.Ticket, error) {
+func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userID uint, amount int64, ticketRef string) (*models.Ticket, error) {
 	var ticket models.Ticket
 
 	err := p.DB.Transaction(func(tx *gorm.DB) error {
 		var status models.SeatStatus
 
+		var seat models.Seat
+        if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
+            return errors.New("seat_not_found")
+        }
+
 		// ۱. قفل کردن سطر صندلی برای جلوگیری از Race Condition
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("seat_id = ? AND event_id = ?", seatID, eventID).
-			First(&status).Error
-		if err != nil {
-			return errors.New("seat_not_found")
-		}
+        err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+            Where("seat_id = ? AND event_id = ?", seat.ID, eventID).
+            First(&status).Error
+        if err != nil {
+            return errors.New("seat_not_found")
+        }
 
 		// ۲. اعتبارسنجی وضعیت رزرو صندلی
 		if status.Status != "reserved" || status.ReservedBy == nil || *status.ReservedBy != userID {
@@ -97,7 +108,7 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatID, eventID, userID uint, amo
 
 		// ۴. ایجاد رکورد بلیت
 		ticket = models.Ticket{
-			SeatID:     seatID,
+			SeatID:     seat.ID,
 			EventID:    eventID,
 			UserID:     userID,
 			TicketRef:  ticketRef,

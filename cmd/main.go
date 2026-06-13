@@ -1,3 +1,12 @@
+// @title SwiftSeat API
+// @version 1.0
+// @description SwiftSeat REST API documentation
+// @host localhost
+// @BasePath /api
+// @schemes http
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
 package main
 
 import (
@@ -34,7 +43,6 @@ func main() {
 
 	token := token.New(cfg.JWTSecret)
 
-
 	fmt.Println("💾 Database connection established:", db.DB)
 	fmt.Println("💎 The SwiftSeat engine is ready for use.")
 
@@ -44,7 +52,7 @@ func main() {
 	cronWorker.Start()
 
 	// user service
-	userSvc := service.NewUserService(db,token)
+	userSvc := service.NewUserService(db, token)
 	userHandler := handlers.NewUserHandler(userSvc)
 	// event services
 	eventSvc := service.NewEventService(db, &wg, rds)

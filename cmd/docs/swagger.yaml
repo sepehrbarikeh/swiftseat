@@ -1,4 +1,320 @@
+basePath: /api
+definitions:
+  handlers.ConfirmPaymentRequest:
+    properties:
+      amount:
+        type: integer
+      event_id:
+        type: integer
+      seat_number:
+        type: string
+    type: object
+  handlers.CreateEventRequest:
+    properties:
+      description:
+        type: string
+      location:
+        type: string
+      rows:
+        type: integer
+      seats_per_row:
+        type: integer
+      start_time:
+        type: string
+      title:
+        type: string
+    type: object
+  handlers.LoginDTO:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  handlers.RegisterDTO:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+    type: object
+  handlers.ReserveSeatRequest:
+    properties:
+      event_id:
+        type: integer
+      seat_number:
+        description: "\U0001F680 یکپارچه‌سازی با ساختار جدید"
+        type: string
+    type: object
+host: localhost
 info:
   contact: {}
-paths: {}
+  description: SwiftSeat REST API documentation
+  title: SwiftSeat API
+  version: "1.0"
+paths:
+  /api/events:
+    get:
+      consumes:
+      - application/json
+      description: List events with optional pagination and filtering
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: limit
+        type: integer
+      - description: Search term
+        in: query
+        name: search
+        type: string
+      - description: Location filter
+        in: query
+        name: location
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Search events
+      tags:
+      - Events
+    post:
+      consumes:
+      - application/json
+      description: Create a new event in the system
+      parameters:
+      - description: Event payload
+        in: body
+        name: event
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateEventRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create an event
+      tags:
+      - Events
+  /api/events/{event_id}/seats:
+    get:
+      consumes:
+      - application/json
+      description: Get the seat map for an event
+      parameters:
+      - description: Event ID
+        in: path
+        name: event_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get seat map
+      tags:
+      - Seats
+  /api/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate a user and return a JWT token
+      parameters:
+      - description: Login request
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.LoginDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Login user
+      tags:
+      - Authentication
+  /api/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user account
+      parameters:
+      - description: User registration
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RegisterDTO'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Register a new user
+      tags:
+      - Authentication
+  /api/seats/confirm-payment:
+    post:
+      consumes:
+      - application/json
+      description: Confirm payment for a reserved seat and issue a ticket
+      parameters:
+      - description: Payment confirmation
+        in: body
+        name: payment
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ConfirmPaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Confirm payment
+      tags:
+      - Seats
+  /api/seats/reserve:
+    post:
+      consumes:
+      - application/json
+      description: Temporarily reserve a seat before payment
+      parameters:
+      - description: Seat reservation
+        in: body
+        name: reservation
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ReserveSeatRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Reserve a seat
+      tags:
+      - Seats
+  /api/tickets/my:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve tickets for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get current user's tickets
+      tags:
+      - Tickets
+schemes:
+- http
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

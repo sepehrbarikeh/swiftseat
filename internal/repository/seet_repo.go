@@ -126,3 +126,9 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatID, eventID, userID uint, amo
 	return &ticket, nil
 }
 
+// BulkCreateSeatStatuses صندلی‌های یک ایونت را به صورت گروهی وارد دیتابیس می‌کند
+func (p *PostgresDB) BulkCreateSeatStatuses(statuses []models.SeatStatus) error {
+	// GORM به صورت خودکار با متد Create روی یک اسلایس (آرایه)، Bulk Insert می‌زند.
+	// پارامتر دوم (مثلاً 100) می‌گوید دیتاها را در دسته‌های 100 تایی دسته‌بندی و ایمپورت کن.
+	return p.DB.CreateInBatches(&statuses, 100).Error
+}

@@ -10,11 +10,13 @@ import (
 	"swift-seat/internal/repository"
 	"swift-seat/internal/server"
 	"swift-seat/internal/service"
+	"sync"
 )
 
 func main() {
 	fmt.Println("🔥 SwiftSeat is initializing...")
 
+	var wg sync.WaitGroup
 	// load settings from config.yaml
 	cfg := config.LoadConfig("./")
 
@@ -29,14 +31,14 @@ func main() {
 	cronWorker := worker.NewCleanupWorker(db, cfg.CleanupInterval)
 	cronWorker.Start()
 
-	eventSvc := service.NewEventService(db)
+	eventSvc := service.NewEventService(db, &wg)
 	eventHandler := handlers.NewEventHandler(eventSvc)
 
-	seetSvc := service.NewSeatService(db, cfg.SeetLock)
-	seetHandler := handlers.NewSeatHandler(seetSvc)
+	seatSvc := service.NewSeatService(db, cfg.SeetLock)
+	seetHandler := handlers.NewSeatHandler(seatSvc)
 
 	authMiddlaware := middleware.NewAuthMiddleware(Token)
-	server := server.NewServer(cfg.AppPort, eventHandler, seetHandler,authMiddlaware)
+	server := server.NewServer(cfg.AppPort, &wg, eventHandler, seetHandler, authMiddlaware)
 	server.StartServer()
 
 }

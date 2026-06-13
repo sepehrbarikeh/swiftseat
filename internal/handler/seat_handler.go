@@ -79,3 +79,4 @@ func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
 		},
 	})
 }
+

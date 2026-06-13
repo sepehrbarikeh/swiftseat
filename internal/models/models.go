@@ -26,6 +26,7 @@ type Event struct {
 	TotalSeats  int       `gorm:"not null" json:"total_seats"`
 	CreatedAt   time.Time `json:"created_at"`
 	Seats       []Seat    `json:"seats,omitempty"`
+	Status    string    `gorm:"type:varchar(30);default:'creating_seats';not null" json:"status"`
 }
 
 // Seat مدل صندلی‌های فیزیکی سالن
@@ -37,14 +38,12 @@ type Seat struct {
 	Price      float64 `gorm:"type:numeric(10,2);not null" json:"price"`
 }
 
-
 type SeatStatus struct {
-	ID         uint       `gorm:"primaryKey" json:"id"`
-	
-	
-	SeatID     uint       `gorm:"uniqueIndex:idx_seat_event;not null" json:"seat_id"`
-	EventID    uint       `gorm:"uniqueIndex:idx_seat_event;not null" json:"event_id"`
-	
+	ID uint `gorm:"primaryKey" json:"id"`
+
+	SeatID  uint `gorm:"uniqueIndex:idx_seat_event;not null" json:"seat_id"`
+	EventID uint `gorm:"uniqueIndex:idx_seat_event;not null" json:"event_id"`
+
 	Status     string     `gorm:"type:varchar(20);default:'available'" json:"status"` // available, reserved, sold
 	ReservedBy *uint      `json:"reserved_by,omitempty"`
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
@@ -60,16 +59,15 @@ type Booking struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-
 type Ticket struct {
-	ID         uint           `gorm:"primaryKey" json:"id"`
-	
-	SeatID     uint           `gorm:"not null" json:"seat_id"`
-	Seat       Seat           `gorm:"foreignKey:SeatID" json:"seat"`   // 👈 اضافه شد برای رابطه صندلی
-	
-	EventID    uint           `gorm:"not null" json:"event_id"`
-	Event      Event          `gorm:"foreignKey:EventID" json:"event"` // 👈 اضافه شد برای رابطه رویداد
-	
+	ID uint `gorm:"primaryKey" json:"id"`
+
+	SeatID uint `gorm:"not null" json:"seat_id"`
+	Seat   Seat `gorm:"foreignKey:SeatID" json:"seat"` // 👈 اضافه شد برای رابطه صندلی
+
+	EventID uint  `gorm:"not null" json:"event_id"`
+	Event   Event `gorm:"foreignKey:EventID" json:"event"` // 👈 اضافه شد برای رابطه رویداد
+
 	UserID     uint           `gorm:"not null" json:"user_id"`
 	TicketRef  string         `gorm:"type:varchar(100);unique;not null" json:"ticket_ref"`
 	PaidAmount int64          `json:"paid_amount"`

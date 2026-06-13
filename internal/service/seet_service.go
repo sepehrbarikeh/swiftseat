@@ -15,6 +15,8 @@ type SeatService struct {
 	seatLockDuration time.Duration
 }
 
+
+
 func NewSeatService(repo *repository.PostgresDB, seatLockDuration time.Duration) *SeatService {
 	return &SeatService{repo: repo, seatLockDuration: seatLockDuration}
 }

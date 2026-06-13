@@ -1,64 +1,68 @@
 package service
 
 import (
+	"log"
 	"net/http"
+	"sync"
 	"time"
 
-	"swift-seat/internal/pkg/apperrors"
 	"swift-seat/internal/models"
+	"swift-seat/internal/pkg/apperrors"
 	"swift-seat/internal/repository"
 )
 
 type EventService struct {
 	repo *repository.PostgresDB
+	wg   *sync.WaitGroup // 👈 تزریق پوینتر WaitGroup برای مدیریت فرآیندهای پس‌زمینه
 }
 
-func NewEventService(repo *repository.PostgresDB) *EventService {
-	return &EventService{repo: repo}
+func NewEventService(repo *repository.PostgresDB, wg *sync.WaitGroup) *EventService {
+	return &EventService{repo: repo, wg: wg}
 }
 
 type CreateEventDTO struct {
 	Title       string
 	Description string
 	Location    string
-	StartTime   string
+	StartTime   time.Time
 	Rows        int
 	SeatsPerRow int
 }
 
 func (s *EventService) CreateNewEvent(dto CreateEventDTO) (*models.Event, *apperrors.AppError) {
-	if dto.Title == "" || dto.Location == "" {
-		return nil, apperrors.NewValidationError("Event title and location cannot be empty")
-	}
-	if dto.Rows <= 0 || dto.SeatsPerRow <= 0 {
-		return nil, apperrors.NewValidationError("Number of rows and seats must be greater than zero")
-	}
-
-	parsedTime, err := time.Parse(time.RFC3339, dto.StartTime)
-	if err != nil {
-		return nil, apperrors.New(http.StatusBadRequest, "Invalid date format", err)
-	}
-
-	if parsedTime.Before(time.Now()) {
-		return nil, apperrors.NewValidationError("The time of the event cannot be in the past.")
-	}
 
 	event := &models.Event{
 		Title:       dto.Title,
 		Description: dto.Description,
 		Location:    dto.Location,
-		StartTime:   parsedTime,
+		StartTime:   dto.StartTime,
 		TotalSeats:  dto.Rows * dto.SeatsPerRow,
+		Status:    "creating_seats",
 	}
 
-	// ۳. صدا زدن ریپازیتوری
-	err = s.repo.CreateEventWithSeats(event, dto.Rows, dto.SeatsPerRow)
-	if err != nil {
-		// تبدیل خطای خام سیستم به خطای ساختاریافته غنی با کد 500
-		return nil, apperrors.New(http.StatusInternalServerError, "Unexpected error", err)
+	if err := s.repo.CreateEvent(event); err != nil {
+		return nil, apperrors.New(http.StatusInternalServerError, "Internal server error", err)
 	}
+
+	s.wg.Add(1)
+	go func(id uint, r, sNum int) {
+		defer s.wg.Done()
+
+		err := s.repo.CreateSeatsForEvent(id, r, sNum)
+        if err != nil {
+            log.Printf("[CRITICAL] Failed to generate seats for event %d: %v", id, err)
+            s.repo.UpdateEventStatus(id, "failed") // change status to fail
+            return
+        }
+
+        // seats is ready
+        s.repo.UpdateEventStatus(id, "active")
+        log.Printf("[ASYNC SUCCESS] Event %d is now active with all seats generated", id)
+
+	}(event.ID, dto.Rows, dto.SeatsPerRow)
 
 	return event, nil
+
 }
 
 func (s *EventService) ListAllEvents() ([]models.Event, *apperrors.AppError) {

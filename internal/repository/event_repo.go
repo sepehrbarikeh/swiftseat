@@ -2,25 +2,27 @@ package repository
 
 import (
 	"fmt"
-	"net/http"
-
-	"swift-seat/internal/pkg/apperrors"
 	"swift-seat/internal/models"
 
 	"gorm.io/gorm"
 )
-func (p *PostgresDB) CreateEventWithSeats(event *models.Event, rows int, seatsPerRow int) error {
-	return p.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(event).Error; err != nil {
-			return err
-		}
 
+// internal/repository/postgres.go
+
+// CreateEvent فقط خود ایونت را می‌سازد (کاملاً Sync)
+func (p *PostgresDB) CreateEvent(event *models.Event) error {
+	return p.DB.Create(event).Error
+}
+
+// CreateSeatsForEvent صندلی‌ها و وضعیت‌ها را می‌سازد (می‌تواند Async صدا زده شود)
+func (p *PostgresDB) CreateSeatsForEvent(eventID uint, rows int, seatsPerRow int) error {
+	return p.DB.Transaction(func(tx *gorm.DB) error {
 		var seats []models.Seat
 		for r := 0; r < rows; r++ {
 			rowName := string(rune('A' + r))
 			for s := 1; s <= seatsPerRow; s++ {
 				seats = append(seats, models.Seat{
-					EventID:    event.ID,
+					EventID:    eventID, // آی‌دی واقعی ایونت
 					SeatNumber: fmt.Sprintf("%s-%d", rowName, s),
 					RowName:    rowName,
 					Price:      500000.0,
@@ -28,24 +30,20 @@ func (p *PostgresDB) CreateEventWithSeats(event *models.Event, rows int, seatsPe
 			}
 		}
 
-		if err := tx.Create(&seats).Error; err != nil {
-			return apperrors.New(http.StatusInternalServerError, "Error creating seats", err)
+		if err := tx.CreateInBatches(&seats, 200).Error; err != nil {
+			return err
 		}
 
 		var statuses []models.SeatStatus
 		for _, seat := range seats {
 			statuses = append(statuses, models.SeatStatus{
 				SeatID:  seat.ID,
-				EventID: event.ID,
+				EventID: eventID,
 				Status:  "available",
 			})
 		}
 
-		if err := tx.Create(&statuses).Error; err != nil {
-			return apperrors.New(http.StatusInternalServerError, "Error creating seat statuses", err)
-		}
-
-		return nil
+		return tx.CreateInBatches(&statuses, 200).Error
 	})
 }
 
@@ -53,4 +51,15 @@ func (p *PostgresDB) GetAll() ([]models.Event, error) {
 	var events []models.Event
 	err := p.DB.Model(&models.Event{}).Find(&events).Error
 	return events, err
+}
+
+func (p *PostgresDB) BulkCreateSeats(seats []models.SeatStatus) error {
+	if len(seats) == 0 {
+		return nil
+	}
+	return p.DB.CreateInBatches(&seats, 200).Error
+}
+
+func (p *PostgresDB) UpdateEventStatus(eventID uint, status string) error {
+    return p.DB.Model(&models.Event{}).Where("id = ?", eventID).Update("status", status).Error
 }

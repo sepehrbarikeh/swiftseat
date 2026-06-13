@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"swift-seat/internal/config"
+	"swift-seat/internal/database"
 	handlers "swift-seat/internal/handler"
 	"swift-seat/internal/middleware"
 	token "swift-seat/internal/pkg/Token"
@@ -25,13 +26,18 @@ func main() {
 
 	Token := token.New(cfg.JWTSecret)
 
+	fmt.Println(Token.GenerateToken(42))
+
 	fmt.Println("💾 Database connection established:", db.DB)
 	fmt.Println("💎 The SwiftSeat engine is ready for use.")
+
+	rds := database.InitRedis()
+
 
 	cronWorker := worker.NewCleanupWorker(db, cfg.CleanupInterval)
 	cronWorker.Start()
 
-	eventSvc := service.NewEventService(db, &wg)
+	eventSvc := service.NewEventService(db, &wg,rds)
 	eventHandler := handlers.NewEventHandler(eventSvc)
 
 	seatSvc := service.NewSeatService(db, cfg.SeetLock)

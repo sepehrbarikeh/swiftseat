@@ -11,6 +11,12 @@ require (
 )
 
 require (
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	go.uber.org/atomic v1.11.0 // indirect
+)
+
+require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -28,6 +34,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
+	github.com/redis/go-redis/v9 v9.18.0
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect

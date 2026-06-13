@@ -63,3 +63,20 @@ func (p *PostgresDB) BulkCreateSeats(seats []models.SeatStatus) error {
 func (p *PostgresDB) UpdateEventStatus(eventID uint, status string) error {
     return p.DB.Model(&models.Event{}).Where("id = ?", eventID).Update("status", status).Error
 }
+
+
+func (p *PostgresDB) GetActiveEvents() ([]models.Event, error) {
+	var events []models.Event
+
+	
+	err := p.DB.
+		Where("status = ?", "active").
+		Order("start_time asc").
+		Find(&events).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}

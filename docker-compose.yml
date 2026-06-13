@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  redis:
+    image: bitnami/redis:6.2
+    container_name: swift_seat_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=MySuperSecureRedisPassword
+    volumes:
+      - redis_data:/bitnami/redis/data
+
+volumes:
+  redis_data:

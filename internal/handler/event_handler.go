@@ -24,8 +24,6 @@ func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-
-
 	if req.Title == "" || req.Location == "" {
 	return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 		"error":  "Event title and location cannot be empty",
@@ -70,9 +68,16 @@ func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 }
 
 func (h *EventHandler) GetEvents(c *fiber.Ctx) error {
-	events, appErr := h.svc.ListAllEvents()
-	if appErr != nil {
-		return c.Status(appErr.StatusCode).JSON(appErr)
-	}
-	return c.JSON(events)
+
+    ctx := c.UserContext() 
+
+    events, source, err := h.svc.GetActiveEvents(ctx)
+    if err != nil {
+        return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "خطا در دریافت لیست رویدادها"})
+    }
+
+    return c.Status(http.StatusOK).JSON(fiber.Map{
+        "source": source, // 
+        "data":   events,
+    })
 }

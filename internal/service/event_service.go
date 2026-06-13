@@ -1,23 +1,30 @@
 package service
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
+	"swift-seat/internal/database"
 	"swift-seat/internal/models"
 	"swift-seat/internal/pkg/apperrors"
 	"swift-seat/internal/repository"
 )
 
 type EventService struct {
-	repo *repository.PostgresDB
-	wg   *sync.WaitGroup // 👈 تزریق پوینتر WaitGroup برای مدیریت فرآیندهای پس‌زمینه
+	repo  *repository.PostgresDB
+	redis *database.RedisClient
+	wg    *sync.WaitGroup // 👈 تزریق پوینتر WaitGroup برای مدیریت فرآیندهای پس‌زمینه
 }
 
-func NewEventService(repo *repository.PostgresDB, wg *sync.WaitGroup) *EventService {
-	return &EventService{repo: repo, wg: wg}
+func NewEventService(repo *repository.PostgresDB, wg *sync.WaitGroup, redis *database.RedisClient) *EventService {
+	return &EventService{
+		repo:  repo,
+		wg:    wg,
+		redis: redis,
+	}
 }
 
 type CreateEventDTO struct {
@@ -29,6 +36,34 @@ type CreateEventDTO struct {
 	SeatsPerRow int
 }
 
+func (s *EventService) GetActiveEvents(ctx context.Context) ([]models.Event, string, error) {
+	cacheKey := "events:active"
+	var events []models.Event
+
+	found, err := s.redis.GetCache(ctx, cacheKey, &events)
+	if err != nil {
+		log.Printf("[WARN] Redis failed in Service layer: %v", err)
+	}
+	if found {
+
+		return events, "cache", nil
+	}
+
+	events, err = s.repo.GetActiveEvents()
+	if err != nil {
+		return nil, "", err
+	}
+
+	// ۳. اگر دیتایی بود، برای دفعات بعدی در ردیس ذخیره می‌کنیم (انقضا: ۱۰ دقیقه)
+	if len(events) > 0 {
+		if err := s.redis.SetCache(ctx, cacheKey, events, 10*time.Minute); err != nil {
+			log.Printf("[WARN] Failed to populate Redis cache: %v", err)
+		}
+	}
+
+	return events, "database", nil
+}
+
 func (s *EventService) CreateNewEvent(dto CreateEventDTO) (*models.Event, *apperrors.AppError) {
 
 	event := &models.Event{
@@ -37,7 +72,7 @@ func (s *EventService) CreateNewEvent(dto CreateEventDTO) (*models.Event, *apper
 		Location:    dto.Location,
 		StartTime:   dto.StartTime,
 		TotalSeats:  dto.Rows * dto.SeatsPerRow,
-		Status:    "creating_seats",
+		Status:      "creating_seats",
 	}
 
 	if err := s.repo.CreateEvent(event); err != nil {
@@ -48,16 +83,24 @@ func (s *EventService) CreateNewEvent(dto CreateEventDTO) (*models.Event, *apper
 	go func(id uint, r, sNum int) {
 		defer s.wg.Done()
 
-		err := s.repo.CreateSeatsForEvent(id, r, sNum)
-        if err != nil {
-            log.Printf("[CRITICAL] Failed to generate seats for event %d: %v", id, err)
-            s.repo.UpdateEventStatus(id, "failed") // change status to fail
-            return
-        }
+		ctx := context.Background()
 
-        // seats is ready
-        s.repo.UpdateEventStatus(id, "active")
-        log.Printf("[ASYNC SUCCESS] Event %d is now active with all seats generated", id)
+		err := s.repo.CreateSeatsForEvent(id, r, sNum)
+		if err != nil {
+			log.Printf("[CRITICAL] Failed to generate seats for event %d: %v", id, err)
+			s.repo.UpdateEventStatus(id, "failed") // change status to fail
+			return
+		}
+
+		// seats is ready
+		s.repo.UpdateEventStatus(id, "active")
+
+		// ۲. 🚀 باطل کردن کش: چون یک ایونت اکتیو جدید داریم، کش قبلی ردیس را پاک می‌کنیم
+		if err := s.redis.DeleteCache(ctx, "events:active"); err != nil {
+			log.Printf("[WARN] Failed to invalidate Redis cache after event activation: %v", err)
+		}
+
+		log.Printf("[ASYNC SUCCESS] Event %d is active and cache invalidated", id)
 
 	}(event.ID, dto.Rows, dto.SeatsPerRow)
 

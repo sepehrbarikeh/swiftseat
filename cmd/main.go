@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"swift-seat/cmd/docs"
 	"swift-seat/internal/config"
 	"swift-seat/internal/database"
 	handlers "swift-seat/internal/handler"
@@ -19,7 +20,14 @@ func main() {
 
 	var wg sync.WaitGroup
 	// load settings from config.yaml
-	cfg := config.LoadConfig("./")
+	cfg := config.LoadConfig("../")
+
+	docs.SwaggerInfo.Title = "SwiftSeat API"
+	docs.SwaggerInfo.Description = "SwiftSeat REST API documentation"
+	docs.SwaggerInfo.Version = "1.0"
+	docs.SwaggerInfo.Host = fmt.Sprintf("localhost:%s", cfg.AppPort)
+	docs.SwaggerInfo.BasePath = "/api"
+	docs.SwaggerInfo.Schemes = []string{"http"}
 
 	// Initialize the database connection
 	db := repository.InitDB(cfg)

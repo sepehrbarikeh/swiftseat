@@ -11,9 +11,14 @@ import (
 	"gorm.io/gorm"
 )
 
+type PostgresDB struct{
+	DB *gorm.DB
+}
+
+
 
 // InitDB connects to the PostgreSQL database and performs auto-migration for the models.
-func InitDB(config *config.Config) *gorm.DB {
+func InitDB(config *config.Config) *PostgresDB {
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=%s",
 		config.DBHost,
 		config.DBUser,
@@ -43,5 +48,7 @@ func InitDB(config *config.Config) *gorm.DB {
 	}
 
 	fmt.Println("🚀 Tables migrated successfully.")
-	return database
+	return &PostgresDB{
+		DB: database,
+	}
 }

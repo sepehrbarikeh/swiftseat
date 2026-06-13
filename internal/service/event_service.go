@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"swift-seat/internal/apperrors"
+	"swift-seat/internal/pkg/apperrors"
 	"swift-seat/internal/models"
 	"swift-seat/internal/repository"
 )
@@ -27,24 +27,22 @@ type CreateEventDTO struct {
 }
 
 func (s *EventService) CreateNewEvent(dto CreateEventDTO) (*models.Event, *apperrors.AppError) {
-	// ۱. ولیدیشن منطق بیزینس (Business Rules Validation)
 	if dto.Title == "" || dto.Location == "" {
-		return nil, apperrors.NewValidationError("عنوان رویداد و مکان آن نمی‌تواند خالی باشد")
+		return nil, apperrors.NewValidationError("Event title and location cannot be empty")
 	}
 	if dto.Rows <= 0 || dto.SeatsPerRow <= 0 {
-		return nil, apperrors.NewValidationError("تعداد ردیف‌ها و صندلی‌ها باید بزرگتر از صفر باشد")
+		return nil, apperrors.NewValidationError("Number of rows and seats must be greater than zero")
 	}
 
 	parsedTime, err := time.Parse(time.RFC3339, dto.StartTime)
 	if err != nil {
-		return nil, apperrors.New(http.StatusBadRequest, "فرمت تاریخ وارد شده نامعتبر است (RFC3339 مورد نیاز است)", err)
+		return nil, apperrors.New(http.StatusBadRequest, "Invalid date format", err)
 	}
 
 	if parsedTime.Before(time.Now()) {
-		return nil, apperrors.NewValidationError("زمان برگزاری رویداد نمی‌تواند در گذشته باشد")
+		return nil, apperrors.NewValidationError("The time of the event cannot be in the past.")
 	}
 
-	// ۲. مپ کردن به مدل دیتابیس
 	event := &models.Event{
 		Title:       dto.Title,
 		Description: dto.Description,
@@ -57,7 +55,7 @@ func (s *EventService) CreateNewEvent(dto CreateEventDTO) (*models.Event, *apper
 	err = s.repo.CreateEventWithSeats(event, dto.Rows, dto.SeatsPerRow)
 	if err != nil {
 		// تبدیل خطای خام سیستم به خطای ساختاریافته غنی با کد 500
-		return nil, apperrors.New(http.StatusInternalServerError, "خطای غیرمنتظره در سیستم هنگام ذخیره‌سازی رویداد", err)
+		return nil, apperrors.New(http.StatusInternalServerError, "Unexpected error", err)
 	}
 
 	return event, nil
@@ -66,7 +64,7 @@ func (s *EventService) CreateNewEvent(dto CreateEventDTO) (*models.Event, *apper
 func (s *EventService) ListAllEvents() ([]models.Event, *apperrors.AppError) {
 	events, err := s.repo.GetAll()
 	if err != nil {
-		return nil, apperrors.New(http.StatusInternalServerError, "خطا در دریافت لیست رویدادها", err)
+		return nil, apperrors.New(http.StatusInternalServerError, "Error retrieving event list.", err)
 	}
 	return events, nil
 }

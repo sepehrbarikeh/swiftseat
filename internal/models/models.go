@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // User مدل کاربر
@@ -52,4 +54,16 @@ type Booking struct {
 	SeatID        uint      `gorm:"not null" json:"seat_id"`
 	PaymentStatus string    `gorm:"type:varchar(20);default:'paid'" json:"payment_status"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+
+type Ticket struct {
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	SeatID    uint           `gorm:"not null" json:"seat_id"`
+	EventID   uint           `gorm:"not null" json:"event_id"`
+	UserID    uint           `gorm:"not null" json:"user_id"`
+	TicketRef string         `gorm:"type:varchar(100);unique;not null" json:"ticket_ref"` // کد پیگیری بلیت
+	PaidAmount int64         `json:"paid_amount"`
+	CreatedAt time.Time      `json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }

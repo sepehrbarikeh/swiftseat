@@ -2,6 +2,7 @@ package config
 
 import (
 	"log"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -17,6 +18,10 @@ type Config struct {
 	DBSSLMode  string
 
 	JWTSecret string
+
+	SeetLock time.Duration
+
+	CleanupInterval time.Duration
 
 }
 
@@ -42,5 +47,7 @@ func LoadConfig(path string) *Config {
 
 		JWTSecret: viper.GetString("jwt.secret"),
 
+		SeetLock:  viper.GetDuration("seetlock.time"),
+		CleanupInterval:  viper.GetDuration("cleanupinterval.time"),
 	}
 }

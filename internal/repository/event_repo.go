@@ -1,14 +1,16 @@
 package repository
 
-
 import (
 	"fmt"
+	"net/http"
 
+	"swift-seat/internal/pkg/apperrors"
 	"swift-seat/internal/models"
+
 	"gorm.io/gorm"
 )
-func (r *PostgresDB) CreateEventWithSeats(event *models.Event, rows int, seatsPerRow int) error {
-	return r.DB.Transaction(func(tx *gorm.DB) error {
+func (p *PostgresDB) CreateEventWithSeats(event *models.Event, rows int, seatsPerRow int) error {
+	return p.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(event).Error; err != nil {
 			return err
 		}
@@ -27,7 +29,7 @@ func (r *PostgresDB) CreateEventWithSeats(event *models.Event, rows int, seatsPe
 		}
 
 		if err := tx.Create(&seats).Error; err != nil {
-			return err
+			return apperrors.New(http.StatusInternalServerError, "Error creating seats", err)
 		}
 
 		var statuses []models.SeatStatus
@@ -40,15 +42,15 @@ func (r *PostgresDB) CreateEventWithSeats(event *models.Event, rows int, seatsPe
 		}
 
 		if err := tx.Create(&statuses).Error; err != nil {
-			return err
+			return apperrors.New(http.StatusInternalServerError, "Error creating seat statuses", err)
 		}
 
 		return nil
 	})
 }
 
-func (r *PostgresDB) GetAll() ([]models.Event, error) {
+func (p *PostgresDB) GetAll() ([]models.Event, error) {
 	var events []models.Event
-	err := r.DB.Model(&models.Event{}).Find(&events).Error
+	err := p.DB.Model(&models.Event{}).Find(&events).Error
 	return events, err
 }

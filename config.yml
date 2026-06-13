@@ -11,3 +11,9 @@ database:
 
 jwt:
   secret: super-secret-key
+
+seetlock:
+  time: 10m
+
+cleanupinterval:
+  time: 30s

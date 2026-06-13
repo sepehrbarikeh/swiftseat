@@ -21,10 +21,9 @@ type CreateEventRequest struct {
 func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 	var req CreateEventRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "فرمت درخواست نامعتبر است"})
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	// انتقال دیتا به لایه سرویس از طریق DTO
 	dto := service.CreateEventDTO{
 		Title:       req.Title,
 		Description: req.Description,
@@ -36,12 +35,11 @@ func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 
 	event, appErr := h.svc.CreateNewEvent(dto)
 	if appErr != nil {
-		// استفاده مستقیم از استتوس کد و مسیجی که لایه سرویس تعیین کرده!
 		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
 	return c.Status(http.StatusCreated).JSON(fiber.Map{
-		"message":  "رویداد با موفقیت ایجاد شد",
+		"message": "event created",
 		"event_id": event.ID,
 	})
 }

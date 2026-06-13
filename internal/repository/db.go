@@ -42,6 +42,7 @@ func InitDB(config *config.Config) *PostgresDB {
 		&models.Seat{},
 		&models.SeatStatus{},
 		&models.Booking{},
+		&models.Ticket{},
 	)
 	if err != nil {
 		log.Fatalf("❌ Migration error: %v", err)

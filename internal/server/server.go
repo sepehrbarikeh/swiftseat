@@ -3,21 +3,27 @@ package server
 import (
 	"fmt"
 	"log"
-	"swift-seat/internal/router"
 	"swift-seat/internal/handler"
+	"swift-seat/internal/middleware"
+	"swift-seat/internal/router"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 )
 
 type Server struct {
 	port       string
-	handler *handlers.EventHandler
+	eventHandler *handlers.EventHandler
+	seatHandler *handlers.SeatHandler
+	authMiddleware *middleware.AuthMiddleware
 }
 
-func NewServer(port string,handler *handlers.EventHandler) *Server {
+func NewServer(port string,eventHandler *handlers.EventHandler,seatHandler *handlers.SeatHandler,authMiddleware *middleware.AuthMiddleware) *Server {
 	return &Server{
 		port: port,
-		handler: handler,
+		eventHandler: eventHandler,
+		seatHandler: seatHandler,
+		authMiddleware: authMiddleware,
 	}
 }
 
@@ -32,7 +38,7 @@ func (s *Server) StartServer() {
 		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
 	}))
 
-	router.SetupRoutes(app,s.handler)
+	router.SetupRoutes(app,s.eventHandler,s.seatHandler,s.authMiddleware)
 	
 	
 	fmt.Println("💎 SwiftSeat Server is running on port",s.port)

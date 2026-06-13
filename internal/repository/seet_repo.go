@@ -114,7 +114,6 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatID, eventID, userID uint, amo
 		return nil, err
 	}
 
-	// ۵. حالا که تراکنش موفق بود، روابط (Relationships) رو لود می‌کنیم
 	err = p.DB.
 		Preload("Event").
 		Preload("Seat").

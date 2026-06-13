@@ -37,13 +37,17 @@ type Seat struct {
 	Price      float64 `gorm:"type:numeric(10,2);not null" json:"price"`
 }
 
-// SeatStatus مدل وضعیت زنده صندلی (هسته بهینه‌سازی ترافیک)
+
 type SeatStatus struct {
-	SeatID     uint       `gorm:"primaryKey" json:"seat_id"`
-	EventID    uint       `gorm:"not null;index" json:"event_id"` // ایندکس برای لود سریع سالن
+	ID         uint       `gorm:"primaryKey" json:"id"`
+	
+	
+	SeatID     uint       `gorm:"uniqueIndex:idx_seat_event;not null" json:"seat_id"`
+	EventID    uint       `gorm:"uniqueIndex:idx_seat_event;not null" json:"event_id"`
+	
 	Status     string     `gorm:"type:varchar(20);default:'available'" json:"status"` // available, reserved, sold
-	ReservedBy *uint      `json:"reserved_by,omitempty"` 
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`  
+	ReservedBy *uint      `json:"reserved_by,omitempty"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 }
 
 // Booking مدل بلیط صادر شده قطعی

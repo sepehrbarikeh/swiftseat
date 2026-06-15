@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"swift-seat/internal/pkg/apperrors"
+	"swift-seat/internal/pkg/utils"
 	"swift-seat/internal/service"
 	"time"
 
@@ -13,20 +15,13 @@ import (
 )
 
 type CreateEventRequest struct {
-	Title       string                `form:"title"`
-	Description string                `form:"description"`
-	Location    string                `form:"location"`
-	StartTime   string                `form:"start_time"`
-	Rows        int                   `form:"rows"`
-	SeatsPerRow int                   `form:"seats_per_row"`
-	Image       *multipart.FileHeader `form:"image"` // برای دریافت فایل
-}
-
-type UpdateEventRequest struct {
-	Title       string                `form:"title"` // فقط اطلاعاتی که کاربر مجاز است ویرایش کند
-	Description string                `form:"description"`
-	Location    string                `form:"location"`
-	Image       *multipart.FileHeader `form:"image"` // فایلی که می‌خواهیم آپلود کنیم
+    Title       string                `form:"title" validate:"required,min=3"`
+    Description string                `form:"description" validate:"required"`
+    Location    string                `form:"location" validate:"required"`
+    StartTime   string                `form:"start_time" validate:"required"`
+    Rows        int                   `form:"rows" validate:"required,gt=0"`
+    SeatsPerRow int                   `form:"seats_per_row" validate:"required,gt=0"`
+    Image       *multipart.FileHeader `form:"image" validate:"required"`
 }
 
 // @Summary Create an event
@@ -54,16 +49,12 @@ func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 	rows, _ := strconv.Atoi(c.FormValue("rows"))
 	seatsPerRow, _ := strconv.Atoi(c.FormValue("seats_per_row"))
 
-	if title == "" || location == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Event title and location required"})
-	}
-	if rows <= 0 || seatsPerRow <= 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid seat dimensions"})
-	}
+
 
 	parsedTime, err := time.Parse(time.RFC3339, startTimeStr)
 	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid date format"})
+		appErr := apperrors.NewValidationError("Invalid date format")
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
 	fileHeader, err := c.FormFile("image")
@@ -84,6 +75,10 @@ func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 		SeatsPerRow: seatsPerRow,
 		ImageUrl:    savePath,
 	}
+
+	if errs := utils.ValidateStruct(dto); errs != nil {
+        return c.Status(422).JSON(errs)
+    }
 
 	event, appErr := h.svc.CreateNewEvent(c, fileHeader, dto)
 	if appErr != nil {
@@ -130,6 +125,10 @@ func (h *EventHandler) UpdateEvent(c *fiber.Ctx) error {
 		Description: c.FormValue("description"),
 		Location:    c.FormValue("location"),
 	}
+
+	if errs := utils.ValidateStruct(dto); errs != nil {
+        return c.Status(422).JSON(errs)
+    }
 
 	// ... بقیه منطق پارس کردن
 	// اینجا منطق آپدیت را فراخوانی کن
@@ -182,9 +181,9 @@ func (h *EventHandler) GetEvents(c *fiber.Ctx) error {
 	location := c.Query("location", "")
 
 	// فراخوانی سرویس عمومی
-	res, err := h.svc.GetPublicEvents(c.UserContext(), page, limit, search, location)
-	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch events"})
+	res, appErr := h.svc.GetPublicEvents(c.UserContext(), page, limit, search, location)
+	if appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{"status": "success", "data": res})
@@ -229,9 +228,9 @@ func (h *EventHandler) ListEvents(c *fiber.Ctx) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router / [get]
 func (h *EventHandler) GetHomeData(c *fiber.Ctx) error {
-	data, err := h.svc.GetHomeEvents()
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Failed to load home data"})
+	data, appErr := h.svc.GetHomeEvents()
+	if appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 	return c.JSON(data)
 }

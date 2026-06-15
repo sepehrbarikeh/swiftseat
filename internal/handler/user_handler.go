@@ -3,6 +3,8 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"swift-seat/internal/pkg/apperrors"
+	"swift-seat/internal/pkg/utils"
 	"swift-seat/internal/service"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,14 +15,14 @@ type UserHandler struct {
 }
 
 type RegisterDTO struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Name     string `json:"name" validate:"required,min=3"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8"`
 }
 
 type LoginDTO struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
 }
 
 type UpdateRoleRequest struct {
@@ -44,20 +46,17 @@ func NewUserHandler(svc *service.UserService) *UserHandler {
 func (h *UserHandler) Register(c *fiber.Ctx) error {
 	var req RegisterDTO
 
-	// پارس کردن جی‌سان ورودی
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
+		appErr := apperrors.NewValidationError("Invalid request body")
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
-	// ولیدیشن ساده الزامی بودن فیلدها
-	if req.Name == "" || req.Email == "" || req.Password == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "All fields (name, email, and password) are required."})
+	if errs := utils.ValidateStruct(req); errs != nil {
+		return c.Status(422).JSON(errs)
 	}
 
-	// صدا زدن لایه سرویس
-	if err := h.svc.Register(req.Name, req.Email, req.Password); err != nil {
-		// معمولاً ارور دیتابیس به خاطر ایمیل تکراری رخ میده
-		return c.Status(http.StatusConflict).JSON(fiber.Map{"error": "Registration failed. This email address is probably already registered."})
+	if appErr := h.svc.Register(req.Name, req.Email, req.Password); appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
 	return c.Status(http.StatusCreated).JSON(fiber.Map{
@@ -80,20 +79,19 @@ func (h *UserHandler) Login(c *fiber.Ctx) error {
 	var req LoginDTO
 
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
+		appErr := apperrors.NewValidationError("Invalid request body")
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
-	if req.Email == "" || req.Password == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "email and password is required."})
+	if errs := utils.ValidateStruct(req); errs != nil {
+        return c.Status(422).JSON(errs)
+    }
+
+	token, appErr := h.svc.Login(req.Email, req.Password)
+	if appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
-	// صدا زدن لایه سرویس برای تایید هویت و گرفتن توکن JWT
-	token, err := h.svc.Login(req.Email, req.Password)
-	if err != nil {
-		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	// برگرداندن توکن به همراه نوع آن برای فرانت‌آند
 	return c.Status(http.StatusOK).JSON(fiber.Map{
 		"status": "success",
 		"token":  token,
@@ -120,16 +118,16 @@ func (h *UserHandler) ChangeUserRole(c *fiber.Ctx) error {
 
 	var req UpdateRoleRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
+		appErr := apperrors.NewValidationError("Invalid request")
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
-	// ولیدیشن ساده (اگر از پکیج validator استفاده می‌کنی اینجا فراخوانی کن)
-	if req.Role != "admin" && req.Role != "user" {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid role"})
-	}
+	if errs := utils.ValidateStruct(req); errs != nil {
+        return c.Status(422).JSON(errs)
+    }
 
-	if err := h.svc.UpdateUserRole(uint(idUint), req.Role); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	if appErr := h.svc.UpdateUserRole(uint(idUint), req.Role); appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
 	return c.Status(200).JSON(fiber.Map{"message": "Role updated successfully"})

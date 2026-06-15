@@ -3,6 +3,8 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"swift-seat/internal/pkg/apperrors"
+	"swift-seat/internal/pkg/utils"
 	"swift-seat/internal/service"
 
 	"github.com/gofiber/fiber/v2"
@@ -16,16 +18,16 @@ func NewSeatHandler(svc *service.SeatService) *SeatHandler {
 	return &SeatHandler{svc: svc}
 }
 
-// ساختار رکوئست را تمیز می‌کنیم (دیگر نیازی به user_id در بدنه نیست)
+
 type ReserveSeatRequest struct {
-	SeatNumber string `json:"seat_number"` // 🚀 یکپارچه‌سازی با ساختار جدید
-	EventID    uint   `json:"event_id"`
+    SeatNumber string `json:"seat_number" validate:"required"`
+    EventID    uint   `json:"event_id" validate:"required,gt=0"`
 }
 
 type ConfirmPaymentRequest struct {
-	SeatNumber string `json:"seat_number"`
-	EventID    uint   `json:"event_id"`
-	Amount     int64  `json:"amount"`
+    SeatNumber string `json:"seat_number" validate:"required"`
+    EventID    uint   `json:"event_id" validate:"required,gt=0"`
+    Amount     int64  `json:"amount" validate:"required,gt=0"`
 }
 
 // @Summary Reserve a seat
@@ -43,12 +45,13 @@ func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
 	var req ReserveSeatRequest
 
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad request"})
+		appErr := apperrors.NewValidationError("Invalid request body")
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
-	if req.SeatNumber == "" || req.EventID == 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "seat_number and event_id are required"})
-	}
+	if errs := utils.ValidateStruct(req); errs != nil {
+        return c.Status(422).JSON(errs)
+    }
 
 	userID := c.Locals("user_id").(uint)
 
@@ -77,8 +80,13 @@ func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
 	var req ConfirmPaymentRequest
 	if err := c.BodyParser(&req); err != nil {
 		fmt.Println(req)
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
+		appErr := apperrors.NewValidationError("Invalid request body")
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
+
+	if errs := utils.ValidateStruct(req); errs != nil {
+        return c.Status(422).JSON(errs)
+    }
 
 	userID := c.Locals("user_id").(uint)
 
@@ -156,7 +164,8 @@ func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
 func (h *SeatHandler) GetSeatMap(c *fiber.Ctx) error {
 	eventID, err := c.ParamsInt("event_id")
 	if err != nil || eventID <= 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid event id"})
+		appErr := apperrors.NewValidationError("Invalid event id")
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
 	// صدا زدن سرویس بدون نیاز به هیچ دیتای کاربری
@@ -188,9 +197,9 @@ func (h *SeatHandler) GetSeatMap(c *fiber.Ctx) error {
 func (h *SeatHandler) ValidateTicket(c *fiber.Ctx) error {
 	ref := c.Params("ref")
 
-	ticket, err := h.svc.GetTicketByRef(ref)
-	if err != nil {
-		return c.Status(404).JSON(fiber.Map{"message": "Ticket not found or invalid"})
+	ticket, appErr := h.svc.GetTicketByRef(ref)
+	if appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
 	return c.JSON(fiber.Map{

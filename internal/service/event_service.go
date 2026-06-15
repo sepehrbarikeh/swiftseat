@@ -25,9 +25,9 @@ type EventService struct {
 }
 
 type EventResponse struct {
-    models.Event
-    AvailableSeats int64 `json:"available_seats"`
-    IsSoldOut      bool  `json:"is_sold_out"`
+	models.Event
+	AvailableSeats int64 `json:"available_seats"`
+	IsSoldOut      bool  `json:"is_sold_out"`
 }
 
 type UpdateEventRequest struct {
@@ -71,8 +71,8 @@ func (s *EventService) CreateNewEvent(c *fiber.Ctx, fileHeader *multipart.FileHe
 		ImageURL:    dto.ImageUrl,
 	}
 
-	if err := s.repo.CreateEvent(event); err != nil {
-		return nil, apperrors.New(http.StatusInternalServerError, "Internal server error", err)
+	if appErr := s.repo.CreateEvent(event); appErr != nil {
+		return nil, appErr
 	}
 
 	s.wg.Add(1)
@@ -81,15 +81,14 @@ func (s *EventService) CreateNewEvent(c *fiber.Ctx, fileHeader *multipart.FileHe
 
 		ctx := context.Background()
 
-		err := s.repo.CreateSeatsForEvent(id, r, sNum)
-		if err != nil {
-			log.Printf("[CRITICAL] Failed to generate seats for event %d: %v", id, err)
-			s.repo.UpdateEventStatus(id, "failed") // change status to fail
+		if appErr := s.repo.CreateSeatsForEvent(id, r, sNum); appErr != nil {
+			log.Printf("[CRITICAL] Failed to generate seats for event %d: %v", id, appErr)
+			_ = s.repo.UpdateEventStatus(id, "failed") // change status to fail
 			return
 		}
 
 		// seats is ready
-		s.repo.UpdateEventStatus(id, "active")
+		_ = s.repo.UpdateEventStatus(id, "active")
 
 		// ۲. 🚀 باطل کردن کش: چون یک ایونت اکتیو جدید داریم، کش قبلی ردیس را پاک می‌کنیم
 		if err := s.redis.DeleteCache(ctx, "events:active"); err != nil {
@@ -106,10 +105,10 @@ func (s *EventService) CreateNewEvent(c *fiber.Ctx, fileHeader *multipart.FileHe
 
 func (s *EventService) UpdateEvent(c *fiber.Ctx, id string, fileHeader *multipart.FileHeader, dto CreateEventDTO) *apperrors.AppError {
 	ctx := context.Background()
-	// ۱. گرفتن ایونت قدیمی
-	oldEvent, err := s.repo.FindByID(id)
-	if err != nil {
-		return apperrors.New(http.StatusNotFound, "Event not found", err)
+	
+	oldEvent, appErr := s.repo.FindByID(id)
+	if appErr != nil {
+		return appErr
 	}
 
 	// ۲. آپدیت کردن فیلدها
@@ -118,21 +117,20 @@ func (s *EventService) UpdateEvent(c *fiber.Ctx, id string, fileHeader *multipar
 	oldEvent.Location = dto.Location
 	oldEvent.StartTime = dto.StartTime
 
-	// اگر فایل جدیدی هست، آپلود کن و آدرس جدید رو جایگزین کن
+	
 	if fileHeader != nil {
-		// پاک کردن فایل قدیمی (بعد از اطمینان از موفقیت آپدیت)
+		
 		_ = os.Remove(oldEvent.ImageURL)
 
-		err = c.SaveFile(fileHeader, dto.ImageUrl)
-		if err != nil {
+		if err := c.SaveFile(fileHeader, dto.ImageUrl); err != nil {
 			return apperrors.New(500, "Failed to save new image", err)
 		}
 		oldEvent.ImageURL = dto.ImageUrl
 	}
 
-	// ۳. ذخیره در دیتابیس (فراخوانی متد اصلاح شده ریپو)
-	if err := s.repo.UpdateEvent(oldEvent); err != nil {
-		return apperrors.New(500, "Update failed", err)
+	
+	if appErr := s.repo.UpdateEvent(oldEvent); appErr != nil {
+		return appErr
 	}
 	if err := s.redis.DeleteCache(ctx, "events:active"); err != nil {
 		log.Printf("[WARN] Failed to invalidate Redis cache after event activation: %v", err)
@@ -143,16 +141,14 @@ func (s *EventService) UpdateEvent(c *fiber.Ctx, id string, fileHeader *multipar
 
 func (s *EventService) DeleteEvent(id string) *apperrors.AppError {
 	ctx := context.Background()
-	lastFile, err := s.repo.FindByID(id)
-	if err != nil {
-		return apperrors.New(http.StatusInternalServerError, "Error retrieving event list.", err)
+	lastFile, appErr := s.repo.FindByID(id)
+	if appErr != nil {
+		return appErr
 	}
-	err = s.repo.DeleteEvent(id)
-	if err != nil {
-		return apperrors.New(http.StatusInternalServerError, "Error retrieving event list.", err)
+	if appErr := s.repo.DeleteEvent(id); appErr != nil {
+		return appErr
 	}
-	err = os.Remove(lastFile.ImageURL)
-	if err != nil {
+	if err := os.Remove(lastFile.ImageURL); err != nil {
 		return apperrors.New(http.StatusInternalServerError, "Error retrieving event list.", err)
 	}
 	if err := s.redis.DeleteCache(ctx, "events:active"); err != nil {
@@ -162,79 +158,87 @@ func (s *EventService) DeleteEvent(id string) *apperrors.AppError {
 }
 
 // public
-func (s *EventService) GetPublicEvents(ctx context.Context, page, limit int, search, location string) (*PaginatedEventsResponse, error) {
-   
-    cacheKey := fmt.Sprintf("events:public:p%d:l%d:s:%s:l:%s", page, limit, search, location)
+func (s *EventService) GetPublicEvents(ctx context.Context, page, limit int, search, location string) (*PaginatedEventsResponse, *apperrors.AppError) {
 
-    var response PaginatedEventsResponse
-    found, _ := s.redis.GetCache(ctx, cacheKey, &response)
-    if found {
-        return &response, nil
-    }
+	cacheKey := fmt.Sprintf("events:public:p%d:l%d:s:%s:l:%s", page, limit, search, location)
 
-    events, totalItems, err := s.repo.GetEventsPaginated(page, limit, search, location, "active")
-    if err != nil {
-        return nil, err
-    }
+	var response PaginatedEventsResponse
+	found, _ := s.redis.GetCache(ctx, cacheKey, &response)
+	if found {
+		return &response, nil
+	}
 
-    totalPages := int((totalItems + int64(limit) - 1) / int64(limit))
-    response = PaginatedEventsResponse{
-        TotalItems:  totalItems,
-        TotalPages:  totalPages,
-        CurrentPage: page,
-        Limit:       limit,
-        Events:      events,
-    }
+	events, totalItems, appErr := s.repo.GetEventsPaginated(page, limit, search, location, "active")
+	if appErr != nil {
+		return nil, appErr
+	}
 
-    _ = s.redis.SetCache(ctx, cacheKey, response, 10*time.Minute)
-    return &response, nil
+	totalPages := int((totalItems + int64(limit) - 1) / int64(limit))
+	response = PaginatedEventsResponse{
+		TotalItems:  totalItems,
+		TotalPages:  totalPages,
+		CurrentPage: page,
+		Limit:       limit,
+		Events:      events,
+	}
+
+	_ = s.redis.SetCache(ctx, cacheKey, response, 10*time.Minute)
+	return &response, nil
 }
 
 // (Protected)
 func (s *EventService) GetAdminEvents(page, limit int, search, location string) (*PaginatedEventsResponse, *apperrors.AppError) {
-    // ارسال رشته خالی برای status (همه را می‌آورد)
-    events, totalItems, err := s.repo.GetEventsPaginated(page, limit, search, location, "")
-    if err != nil {
-        return nil, apperrors.New(http.StatusInternalServerError, "Failed to retrieve events", err)
-    }
+	
+	events, totalItems, appErr := s.repo.GetEventsPaginated(page, limit, search, location, "")
+	if appErr != nil {
+		return nil, appErr
+	}
 
-    totalPages := int((totalItems + int64(limit) - 1) / int64(limit))
-    return &PaginatedEventsResponse{
-        TotalItems:  totalItems,
-        TotalPages:  totalPages,
-        CurrentPage: page,
-        Limit:       limit,
-        Events:      events,
-    }, nil
+	totalPages := int((totalItems + int64(limit) - 1) / int64(limit))
+	return &PaginatedEventsResponse{
+		TotalItems:  totalItems,
+		TotalPages:  totalPages,
+		CurrentPage: page,
+		Limit:       limit,
+		Events:      events,
+	}, nil
 }
 
-// internal/service/event_service.go
 
-func (s *EventService) GetHomeEvents() (map[string][]EventResponse, error) {
-    // گرفتن لیست‌ها
-    popular, _ := s.repo.GetPopularEvents(4)
-    upcoming, _ := s.repo.GetUpcomingEvents(4)
 
-    // تابع کمکی برای ترکیب با صندلی‌ها
-    getWithSeats := func(events []models.Event) []EventResponse {
-        var ids []uint
-        for _, e := range events { ids = append(ids, e.ID) }
-        counts, _ := s.repo.GetAvailableSeatCounts(ids) // همان متدِ دسته‌ای قبلی
+func (s *EventService) GetHomeEvents() (map[string][]EventResponse, *apperrors.AppError) {
+	
+	popular, appErr := s.repo.GetPopularEvents(4)
+	if appErr != nil {
+		return nil, appErr
+	}
+	upcoming, appErr := s.repo.GetUpcomingEvents(4)
+	if appErr != nil {
+		return nil, appErr
+	}
 
-        var res []EventResponse
-        for _, e := range events {
-            count := counts[e.ID]
-            res = append(res, EventResponse{
-                Event:          e,
-                AvailableSeats: count,
-                IsSoldOut:      count == 0,
-            })
-        }
-        return res
-    }
+	
+	getWithSeats := func(events []models.Event) []EventResponse {
+		var ids []uint
+		for _, e := range events {
+			ids = append(ids, e.ID)
+		}
+		counts, _ := s.repo.GetAvailableSeatCounts(ids) // ignore minor cache errors
 
-    return map[string][]EventResponse{
-        "popular":  getWithSeats(popular),
-        "upcoming": getWithSeats(upcoming),
-    }, nil
+		var res []EventResponse
+		for _, e := range events {
+			count := counts[e.ID]
+			res = append(res, EventResponse{
+				Event:          e,
+				AvailableSeats: count,
+				IsSoldOut:      count == 0,
+			})
+		}
+		return res
+	}
+
+	return map[string][]EventResponse{
+		"popular":  getWithSeats(popular),
+		"upcoming": getWithSeats(upcoming),
+	}, nil
 }

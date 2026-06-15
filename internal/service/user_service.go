@@ -1,10 +1,12 @@
 package service
 
 import (
-	"errors"
 	"swift-seat/internal/models"
 	token "swift-seat/internal/pkg/Token"
+	"swift-seat/internal/pkg/apperrors"
 	"swift-seat/internal/repository"
+
+	"net/http"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -21,47 +23,48 @@ func NewUserService(repo *repository.PostgresDB, token *token.Token) *UserServic
 	}
 }
 
-func (s *UserService) Register(name, email, password string) error {
-	// هش کردن پسورد
+func (s *UserService) Register(name, email, password string) *apperrors.AppError {
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), 10)
 	if err != nil {
-		return err
+		return apperrors.New(http.StatusInternalServerError, "Failed to hash password", err)
 	}
 
 	user := &models.User{
 		Name:         name,
 		Email:        email,
-		PasswordHash: string(hashedPassword), // 👈 تغییر نام فیلد به استراکت جدیدت
-		Role:         "user",             // خودش دیفالت داره ولی دستی هم بذاری اوکیه
+		PasswordHash: string(hashedPassword),
+		Role:         "user",
 	}
 
-	return s.repo.CreateUser(user)
+	if appErr := s.repo.CreateUser(user); appErr != nil {
+		return appErr
+	}
+
+	return nil
 }
 
-func (s *UserService) Login(email, password string) (string, error) {
-	user, err := s.repo.GetUserByEmail(email)
-	if err != nil {
-		return "", errors.New("ایمیل یا کلمه عبور اشتباه است")
+func (s *UserService) Login(email, password string) (string, *apperrors.AppError) {
+	user, appErr := s.repo.GetUserByEmail(email)
+	if appErr != nil {
+		return "", appErr
 	}
 
-	// 👈 مقایسه با فیلد جدید PasswordHash
-	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
-	if err != nil {
-		return "", errors.New("ایمیل یا کلمه عبور اشتباه است")
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return "", apperrors.New(http.StatusUnauthorized, "Invalid credentials", err)
 	}
 
-	token, err := s.token.GenerateToken(user.ID, user.Role)
+	tok, err := s.token.GenerateToken(user.ID, user.Role)
 	if err != nil {
-		return "", err
+		return "", apperrors.New(http.StatusInternalServerError, "Failed to generate token", err)
 	}
 
-	return token, nil
+	return tok, nil
 }
 
-func (s *UserService) UpdateUserRole(userID uint, newRole string) error {
-	err := s.repo.UpdateUserRole(userID, newRole)
-	if err != nil {
-		return err
+func (s *UserService) UpdateUserRole(userID uint, newRole string) *apperrors.AppError {
+	if appErr := s.repo.UpdateUserRole(userID, newRole); appErr != nil {
+		return appErr
 	}
 	return nil
 }

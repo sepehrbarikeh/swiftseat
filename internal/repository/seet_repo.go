@@ -1,24 +1,24 @@
 package repository
 
 import (
-	"errors"
-
+	"net/http"
 	"time"
 
 	"swift-seat/internal/models"
+	"swift-seat/internal/pkg/apperrors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-func (p *PostgresDB) ReserveSeatWithLock(seatNumber string, eventID uint, userID uint, duration time.Duration) error {
-	return p.DB.Transaction(func(tx *gorm.DB) error {
+func (p *PostgresDB) ReserveSeatWithLock(seatNumber string, eventID uint, userID uint, duration time.Duration) *apperrors.AppError {
+	if err := p.DB.Transaction(func(tx *gorm.DB) error {
 		var status models.SeatStatus
 
 		// ۱. پیدا کردن اطلاعات و آیدی اصلی صندلی
 		var seat models.Seat
 		if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
-			return errors.New("gorm: record not found")
+			return err
 		}
 
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
@@ -31,10 +31,10 @@ func (p *PostgresDB) ReserveSeatWithLock(seatNumber string, eventID uint, userID
 
 		now := time.Now()
 		if status.Status == "sold" {
-			return errors.New("seat_already_sold")
+			return apperrors.New(http.StatusConflict, "This seat has already been sold", nil)
 		}
 		if status.Status == "reserved" && status.ExpiresAt != nil && status.ExpiresAt.After(now) {
-			return errors.New("seat_already_reserved")
+			return apperrors.New(http.StatusConflict, "This seat is already reserved by another user", nil)
 		}
 
 		// reserve and lock for new user
@@ -48,11 +48,18 @@ func (p *PostgresDB) ReserveSeatWithLock(seatNumber string, eventID uint, userID
 		}
 
 		return nil
-	})
+	}); err != nil {
+		// if err already an AppError, return it
+		if ae, ok := err.(*apperrors.AppError); ok {
+			return ae
+		}
+		return apperrors.New(http.StatusInternalServerError, "Failed to reserve seat", err)
+	}
+	return nil
 }
 
 // CleanupExpiredSeats
-func (p *PostgresDB) CleanupExpiredSeats() (int64, error) {
+func (p *PostgresDB) CleanupExpiredSeats() (int64, *apperrors.AppError) {
 	now := time.Now()
 
 	result := p.DB.Model(&models.SeatStatus{}).
@@ -64,14 +71,14 @@ func (p *PostgresDB) CleanupExpiredSeats() (int64, error) {
 		})
 
 	if result.Error != nil {
-		return 0, result.Error
+		return 0, apperrors.New(http.StatusInternalServerError, "Failed to cleanup expired seats", result.Error)
 	}
 
 	return result.RowsAffected, nil
 
 }
 
-func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userID uint, amount int64, ticketRef string) (*models.Ticket, error) {
+func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userID uint, amount int64, ticketRef string) (*models.Ticket, *apperrors.AppError) {
 	var ticket models.Ticket
 
 	err := p.DB.Transaction(func(tx *gorm.DB) error {
@@ -79,7 +86,7 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userI
 
 		var seat models.Seat
 		if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
-			return errors.New("seat_not_found")
+			return apperrors.New(http.StatusNotFound, "Seat not found", err)
 		}
 
 		// ۱. قفل کردن سطر صندلی برای جلوگیری از Race Condition
@@ -87,15 +94,15 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userI
 			Where("seat_id = ? AND event_id = ?", seat.ID, eventID).
 			First(&status).Error
 		if err != nil {
-			return errors.New("seat_not_found")
+			return apperrors.New(http.StatusNotFound, "Seat not found", err)
 		}
 
 		// ۲. اعتبارسنجی وضعیت رزرو صندلی
 		if status.Status != "reserved" || status.ReservedBy == nil || *status.ReservedBy != userID {
-			return errors.New("not_your_reservation")
+			return apperrors.New(http.StatusBadRequest, "This seat is not reserved by you or has already been sold", nil)
 		}
 		if status.ExpiresAt != nil && status.ExpiresAt.Before(time.Now()) {
-			return errors.New("reservation_expired")
+			return apperrors.New(http.StatusGone, "The reservation time limit has expired", nil)
 		}
 
 		// ۳. قطعی کردن خرید صندلی
@@ -121,76 +128,61 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userI
 	})
 
 	if err != nil {
-		return nil, err
+		if ae, ok := err.(*apperrors.AppError); ok {
+			return nil, ae
+		}
+		return nil, apperrors.New(http.StatusInternalServerError, "Payment transaction failed", err)
 	}
 
-	err = p.DB.
-		Preload("Event").
-		Preload("Seat").
-		First(&ticket, ticket.ID).Error
-
-	if err != nil {
-		return nil, err
+	if err := p.DB.Preload("Event").Preload("Seat").First(&ticket, ticket.ID).Error; err != nil {
+		return nil, apperrors.New(http.StatusInternalServerError, "Failed to load ticket", err)
 	}
 	return &ticket, nil
 }
 
 // BulkCreateSeatStatuses صندلی‌های یک ایونت را به صورت گروهی وارد دیتابیس می‌کند
-func (p *PostgresDB) BulkCreateSeatStatuses(statuses []models.SeatStatus) error {
-	// GORM به صورت خودکار با متد Create روی یک اسلایس (آرایه)، Bulk Insert می‌زند.
-	// پارامتر دوم (مثلاً 100) می‌گوید دیتاها را در دسته‌های 100 تایی دسته‌بندی و ایمپورت کن.
-	return p.DB.CreateInBatches(&statuses, 100).Error
+func (p *PostgresDB) BulkCreateSeatStatuses(statuses []models.SeatStatus) *apperrors.AppError {
+	if err := p.DB.CreateInBatches(&statuses, 100).Error; err != nil {
+		return apperrors.New(http.StatusInternalServerError, "Failed to bulk create seat statuses", err)
+	}
+	return nil
 }
 
-func (p *PostgresDB) GetUserTickets(userID uint) ([]models.Ticket, error) {
+func (p *PostgresDB) GetUserTickets(userID uint) ([]models.Ticket, *apperrors.AppError) {
 	var tickets []models.Ticket
 
-	err := p.DB.
-		Preload("Event").
-		Preload("Seat").
-		Where("user_id = ?", userID).
-		Order("created_at DESC").
-		Find(&tickets).Error
-
-	if err != nil {
-		return nil, err
+	if err := p.DB.Preload("Event").Preload("Seat").Where("user_id = ?", userID).Order("created_at DESC").Find(&tickets).Error; err != nil {
+		return nil, apperrors.New(http.StatusInternalServerError, "Failed to retrieve user tickets", err)
 	}
 	return tickets, nil
 }
 
-func (p *PostgresDB) GetEventSeatsWithStatus(eventID uint) ([]models.SeatStatus, error) {
-    var statuses []models.SeatStatus
+func (p *PostgresDB) GetEventSeatsWithStatus(eventID uint) ([]models.SeatStatus, *apperrors.AppError) {
+	var statuses []models.SeatStatus
 
-    err := p.DB.
-        Preload("Seat").
-        Joins("JOIN seats ON seats.id = seat_statuses.seat_id").
-        Where("seat_statuses.event_id = ?", eventID).
-        // جادویِ مرتب‌سازی عددی در پستگرس:
-        // split_part ستون رو از '-' جدا می‌کنه و قسمت دوم رو به int تبدیل می‌کنه
-        Order("seats.row_name ASC, (split_part(seats.seat_number, '-', 2))::int ASC").
-        Find(&statuses).Error
-
-    if err != nil {
-        return nil, err
-    }
-    return statuses, nil
+	if err := p.DB.Preload("Seat").Joins("JOIN seats ON seats.id = seat_statuses.seat_id").Where("seat_statuses.event_id = ?", eventID).Order("seats.row_name ASC, (split_part(seats.seat_number, '-', 2))::int ASC").Find(&statuses).Error; err != nil {
+		return nil, apperrors.New(http.StatusInternalServerError, "Failed to fetch seat statuses", err)
+	}
+	return statuses, nil
 }
 
-func (p *PostgresDB) GetTicketByRef(ref string) (models.Ticket, error) {
+func (p *PostgresDB) GetTicketByRef(ref string) (models.Ticket, *apperrors.AppError) {
 	var ticket models.Ticket
-	// استفاده از Preload برای گرفتن دیتایِ ایونت و صندلی همراه با تیکت
-	err := p.DB.Preload("Event").Preload("Seat").Where("ticket_ref = ?", ref).First(&ticket).Error
-	return ticket, err
+	if err := p.DB.Preload("Event").Preload("Seat").Where("ticket_ref = ?", ref).First(&ticket).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return models.Ticket{}, apperrors.New(http.StatusNotFound, "Ticket not found", err)
+		}
+		return models.Ticket{}, apperrors.New(http.StatusInternalServerError, "Failed to query ticket", err)
+	}
+	return ticket, nil
 
 }
 
-func (p *PostgresDB) GetAvailableSeatCount(eventID uint) (int64, error) {
+func (p *PostgresDB) GetAvailableSeatCount(eventID uint) (int64, *apperrors.AppError) {
 	var count int64
-	// فرض بر این است که جدولِ تو seat_statuses است
-	// و صندلی‌های آزاد وضعیت‌شون 'available' هست
-	err := p.DB.Model(&models.SeatStatus{}).
-		Where("event_id = ? AND status = ?", eventID, "available").
-		Count(&count).Error
+	if err := p.DB.Model(&models.SeatStatus{}).Where("event_id = ? AND status = ?", eventID, "available").Count(&count).Error; err != nil {
+		return 0, apperrors.New(http.StatusInternalServerError, "Failed to count available seats", err)
+	}
 
-	return count, err
+	return count, nil
 }

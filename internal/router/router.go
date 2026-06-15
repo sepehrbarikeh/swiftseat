@@ -49,7 +49,7 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 	api.Post("/login", userHandler.Login)
 
 	// events routes //
-	api.Get("/events", seatHandler.GetEvents)
+	api.Get("/events",eventHandler.GetEvents)
 
 	secured := api.Group("/", middleware.AuthRequired)
 
@@ -66,4 +66,5 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 	admin.Put("/events/:id", eventHandler.UpdateEvent)
 	admin.Delete("/events/:id", eventHandler.DeleteEvent)
 	admin.Get("/tickets/validate/:ref", seatHandler.ValidateTicket)
+	admin.Get("/events/all",eventHandler.ListEvents)
 }

@@ -172,36 +172,6 @@ func (h *SeatHandler) GetSeatMap(c *fiber.Ctx) error {
 	})
 }
 
-// @Summary Search events
-// @Description List events with optional pagination and filtering
-// @Tags Events
-// @Accept json
-// @Produce json
-// @Param page query int false "Page number" default(1)
-// @Param limit query int false "Page size" default(10)
-// @Param search query string false "Search term"
-// @Param location query string false "Location filter"
-// @Success 200 {object} map[string]interface{}
-// @Router /api/events [get]
-func (h *SeatHandler) GetEvents(c *fiber.Ctx) error {
-	// خواندن کوئری پارامترها با مقادیر پیش‌فرض فایبر
-	page := c.QueryInt("page", 1)
-	limit := c.QueryInt("limit", 10)
-	search := c.Query("search", "")
-	location := c.Query("location", "")
-
-	res, appErr := h.svc.GetEventsList(page, limit, search, location)
-	if appErr != nil {
-		return c.Status(appErr.StatusCode).JSON(appErr)
-	}
-
-	return c.Status(http.StatusOK).JSON(fiber.Map{
-		"status": "success",
-		"data":   res,
-	})
-}
-
-
 
 // ادمین کد تیکت را می‌فرستد و ما وضعیتش را چک می‌کنیم
 func (h *SeatHandler) ValidateTicket(c *fiber.Ctx) error {

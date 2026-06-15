@@ -2,7 +2,6 @@ package service
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"swift-seat/internal/models"
@@ -12,24 +11,24 @@ import (
 )
 
 type SeatService struct {
-	repo             *repository.PostgresDB
+	repo *repository.PostgresDB
 	seatLockDuration time.Duration
 }
 
 type SeatResponseDTO struct {
-	SeatID     uint    `json:"seat_id"`
-	SeatNumber string  `json:"seat_number"`
-	RowName    string  `json:"row_name"`
-	Price      float64 `json:"price"`
-	Status     string  `json:"status"`
+    SeatID     uint    `json:"seat_id"`
+    SeatNumber string  `json:"seat_number"`
+    RowName    string  `json:"row_name"`
+    Price      float64 `json:"price"`
+    Status     string  `json:"status"`
 }
 
 type PaginatedEventsResponse struct {
-	TotalItems  int64          `json:"total_items"`
-	TotalPages  int            `json:"total_pages"`
-	CurrentPage int            `json:"current_page"`
-	Limit       int            `json:"limit"`
-	Events      []models.Event `json:"events"`
+    TotalItems  int64          `json:"total_items"`
+    TotalPages  int            `json:"total_pages"`
+    CurrentPage int            `json:"current_page"`
+    Limit       int            `json:"limit"`
+    Events      []models.Event `json:"events"`
 }
 
 func NewSeatService(repo *repository.PostgresDB, seatLockDuration time.Duration) *SeatService {
@@ -58,12 +57,14 @@ func (s *SeatService) HoldSeat(SeatNumber string, eventID uint, userID uint) *ap
 	return nil
 }
 
+
 func (s *SeatService) ConfirmPayment(SeatNumber string, eventID, userID uint, amount int64) (*models.Ticket, *apperrors.AppError) {
 
 	ticketRef := ticket.GenerateTicketRef()
 
+	
 	ticket, err := s.repo.ExecutePaymentTransaction(SeatNumber, eventID, userID, amount, ticketRef)
-
+	
 	if err != nil {
 		switch err.Error() {
 		case "seat_not_found":
@@ -80,78 +81,48 @@ func (s *SeatService) ConfirmPayment(SeatNumber string, eventID, userID uint, am
 	return ticket, nil
 }
 
+
 func (s *SeatService) GetUserTickets(userID uint) ([]models.Ticket, *apperrors.AppError) {
-	tickets, err := s.repo.GetUserTickets(userID)
-	if err != nil {
-		return nil, apperrors.New(http.StatusInternalServerError, "Failed to retrieve user tickets", err)
-	}
-	return tickets, nil
+    tickets, err := s.repo.GetUserTickets(userID)
+    if err != nil {
+        return nil, apperrors.New(http.StatusInternalServerError, "Failed to retrieve user tickets", err)
+    }
+    return tickets, nil
 }
+
 
 func (s *SeatService) GetEventSeatMap(eventID uint) ([]SeatResponseDTO, *apperrors.AppError) {
-	statuses, err := s.repo.GetEventSeatsWithStatus(eventID)
-	if err != nil {
-		return nil, apperrors.New(http.StatusInternalServerError, "Failed to fetch seat map", err)
-	}
+    statuses, err := s.repo.GetEventSeatsWithStatus(eventID)
+    if err != nil {
+        return nil, apperrors.New(http.StatusInternalServerError, "Failed to fetch seat map", err)
+    }
 
-	var seatMap []SeatResponseDTO
-	now := time.Now()
+    var seatMap []SeatResponseDTO
+    now := time.Now()
 
-	for _, st := range statuses {
-		currentStatus := st.Status
+    for _, st := range statuses {
+        currentStatus := st.Status
 
-		if st.Status == "reserved" && st.ExpiresAt != nil && st.ExpiresAt.Before(now) {
-			currentStatus = "available"
-		}
+        if st.Status == "reserved" && st.ExpiresAt != nil && st.ExpiresAt.Before(now) {
+            currentStatus = "available"
+        }
 
-		seatMap = append(seatMap, SeatResponseDTO{
-			SeatID:     st.SeatID,
-			SeatNumber: st.Seat.SeatNumber,
-			RowName:    st.Seat.RowName,
-			Price:      st.Seat.Price,
-			Status:     currentStatus,
-		})
-	}
+       
 
-	return seatMap, nil
+        seatMap = append(seatMap, SeatResponseDTO{
+            SeatID:     st.SeatID,
+            SeatNumber: st.Seat.SeatNumber,
+            RowName:    st.Seat.RowName,
+            Price:      st.Seat.Price,
+            Status:     currentStatus,
+        })
+    }
+
+    return seatMap, nil
 }
 
-func (s *SeatService) GetEventsList(page, limit int, search, location string) (*PaginatedEventsResponse, *apperrors.AppError) {
-	// ست کردن مقادیر پیش‌فرض در صورت نامعتبر بودن ورودی‌ها
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 {
-		limit = 10
-	}
-
-	search = NormalizePersianString(search)
-
-	events, totalItems, err := s.repo.GetPaginatedEvents(page, limit, search, location)
-	if err != nil {
-		return nil, apperrors.New(http.StatusInternalServerError, "Failed to retrieve events", err)
-	}
-
-	// محاسبه تعداد کل صفحات
-	totalPages := int((totalItems + int64(limit) - 1) / int64(limit))
-
-	return &PaginatedEventsResponse{
-		TotalItems:  totalItems,
-		TotalPages:  totalPages,
-		CurrentPage: page,
-		Limit:       limit,
-		Events:      events,
-	}, nil
-}
-
-func NormalizePersianString(s string) string {
-	// تبدیل ی و ک عربی به فارسی
-	s = strings.ReplaceAll(s, "ي", "ی")
-	s = strings.ReplaceAll(s, "ك", "ک")
-	return strings.TrimSpace(s)
-}
 
 func (s *SeatService) GetTicketByRef(ref string) (*models.Ticket, error) {
 	ticket, err := s.repo.GetTicketByRef(ref)
-	return ticket, err
+	return &ticket, err
 }

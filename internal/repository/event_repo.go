@@ -47,12 +47,6 @@ func (p *PostgresDB) CreateSeatsForEvent(eventID uint, rows int, seatsPerRow int
 	})
 }
 
-func (p *PostgresDB) GetAll() ([]models.Event, error) {
-	var events []models.Event
-	err := p.DB.Model(&models.Event{}).Find(&events).Error
-	return events, err
-}
-
 func (p *PostgresDB) BulkCreateSeats(seats []models.SeatStatus) error {
 	if len(seats) == 0 {
 		return nil
@@ -64,39 +58,54 @@ func (p *PostgresDB) UpdateEventStatus(eventID uint, status string) error {
 	return p.DB.Model(&models.Event{}).Where("id = ?", eventID).Update("status", status).Error
 }
 
-func (p *PostgresDB) GetActiveEvents() ([]models.Event, error) {
-	var events []models.Event
+func (p *PostgresDB) FindByID(id string) (models.Event, error) {
+	var event models.Event
 
-	err := p.DB.
-		Where("status = ?", "active").
-		Order("start_time asc").
-		Find(&events).Error
-
+	err := p.DB.Where("id = ?", id).First(&event, id).Error
 	if err != nil {
-		return nil, err
+		return models.Event{},err
 	}
-
-	return events, nil
+	return event, nil
 }
 
-// func (p *PostgresDB) UpdateEvent(eventID uint, status string) error {
+func (p *PostgresDB) UpdateEvent(event models.Event) error {
+	return p.DB.Save(event).Error
+}
 
-// }
+func (p *PostgresDB) DeleteEvent(id string) error {
+	return p.DB.Delete(&models.Event{}, id).Error
+}
 
-// func (p *PostgresDB) DeletEvent(id uint) error {
-// 	return p.DB.Delete(&models.Event{}, id).Error
+func (p *PostgresDB) GetEventsPaginated(page, limit int, search, location string, statusFilter string) ([]models.Event, int64, error) {
+    // ایجاد پایه کوئری
+    query := p.DB.Model(&models.Event{})
 
-// 	lastFile, err := s.repo.FindByID(ctx, id, userID)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	err = s.repo.DeleteMedia(ctx, id, userID)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	err = os.Remove(lastFile.FilePath)
-// 	if err != nil {
-// 		return errs.Internal(constant.Internal, err)
-// 	}
-// 	return nil
-// }
+    // ۱. فیلتر وضعیت (اگر خالی باشد، همه وضعیت‌ها برمی‌گردند - مناسب برای ادمین)
+    if statusFilter != "" {
+        query = query.Where("status = ?", statusFilter)
+    }
+
+    // ۲. فیلتر جستجو (هم در عنوان هم در توضیحات)
+    if search != "" {
+        searchPattern := "%" + search + "%"
+        query = query.Where("title LIKE ? OR description LIKE ?", searchPattern, searchPattern)
+    }
+
+    // ۳. فیلتر مکان
+    if location != "" {
+        query = query.Where("location = ?", location)
+    }
+
+    // ۴. دریافت تعداد کل (قبل از اعمال Limit و Offset برای محاسبه صفحات)
+    var total int64
+    if err := query.Count(&total).Error; err != nil {
+        return nil, 0, err
+    }
+
+    // ۵. دریافت دیتا با اعمال Pagination
+    var events []models.Event
+    offset := (page - 1) * limit
+    err := query.Offset(offset).Limit(limit).Order("start_time asc").Find(&events).Error
+    
+    return events, total, err
+}

@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -12,6 +14,8 @@ import (
 	"swift-seat/internal/models"
 	"swift-seat/internal/pkg/apperrors"
 	"swift-seat/internal/repository"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type EventService struct {
@@ -20,12 +24,11 @@ type EventService struct {
 	wg    *sync.WaitGroup // 👈 تزریق پوینتر WaitGroup برای مدیریت فرآیندهای پس‌زمینه
 }
 
-
 type UpdateEventRequest struct {
-    Title       string                `form:"title"`       // فقط اطلاعاتی که کاربر مجاز است ویرایش کند
-    Description string                `form:"description"`
-    Location    string                `form:"location"`
-    Image       *multipart.FileHeader `form:"image"`       // فایلی که می‌خواهیم آپلود کنیم
+	Title       string                `form:"title"` // فقط اطلاعاتی که کاربر مجاز است ویرایش کند
+	Description string                `form:"description"`
+	Location    string                `form:"location"`
+	Image       *multipart.FileHeader `form:"image"` // فایلی که می‌خواهیم آپلود کنیم
 }
 
 func NewEventService(repo *repository.PostgresDB, wg *sync.WaitGroup, redis *database.RedisClient) *EventService {
@@ -46,35 +49,11 @@ type CreateEventDTO struct {
 	ImageUrl    string
 }
 
-func (s *EventService) GetActiveEvents(ctx context.Context) ([]models.Event, string, error) {
-	cacheKey := "events:active"
-	var events []models.Event
+func (s *EventService) CreateNewEvent(c *fiber.Ctx, fileHeader *multipart.FileHeader, dto CreateEventDTO) (*models.Event, *apperrors.AppError) {
 
-	found, err := s.redis.GetCache(ctx, cacheKey, &events)
-	if err != nil {
-		log.Printf("[WARN] Redis failed in Service layer: %v", err)
+	if err := c.SaveFile(fileHeader, dto.ImageUrl); err != nil {
+		return nil, apperrors.New(500, "Internal Error", err)
 	}
-	if found {
-
-		return events, "cache", nil
-	}
-
-	events, err = s.repo.GetActiveEvents()
-	if err != nil {
-		return nil, "", err
-	}
-
-	// ۳. اگر دیتایی بود، برای دفعات بعدی در ردیس ذخیره می‌کنیم (انقضا: ۱۰ دقیقه)
-	if len(events) > 0 {
-		if err := s.redis.SetCache(ctx, cacheKey, events, 10*time.Minute); err != nil {
-			log.Printf("[WARN] Failed to populate Redis cache: %v", err)
-		}
-	}
-
-	return events, "database", nil
-}
-
-func (s *EventService) CreateNewEvent(dto CreateEventDTO) (*models.Event, *apperrors.AppError) {
 
 	event := &models.Event{
 		Title:       dto.Title,
@@ -119,10 +98,106 @@ func (s *EventService) CreateNewEvent(dto CreateEventDTO) (*models.Event, *apper
 
 }
 
-func (s *EventService) ListAllEvents() ([]models.Event, *apperrors.AppError) {
-	events, err := s.repo.GetAll()
+func (s *EventService) UpdateEvent(c *fiber.Ctx, id string, fileHeader *multipart.FileHeader, dto CreateEventDTO) *apperrors.AppError {
+	ctx := context.Background()
+	// ۱. گرفتن ایونت قدیمی
+	oldEvent, err := s.repo.FindByID(id)
 	if err != nil {
-		return nil, apperrors.New(http.StatusInternalServerError, "Error retrieving event list.", err)
+		return apperrors.New(http.StatusNotFound, "Event not found", err)
 	}
-	return events, nil
+
+	// ۲. آپدیت کردن فیلدها
+	oldEvent.Title = dto.Title
+	oldEvent.Description = dto.Description
+	oldEvent.Location = dto.Location
+	oldEvent.StartTime = dto.StartTime
+
+	// اگر فایل جدیدی هست، آپلود کن و آدرس جدید رو جایگزین کن
+	if fileHeader != nil {
+		// پاک کردن فایل قدیمی (بعد از اطمینان از موفقیت آپدیت)
+		_ = os.Remove(oldEvent.ImageURL)
+
+		err = c.SaveFile(fileHeader, dto.ImageUrl)
+		if err != nil {
+			return apperrors.New(500, "Failed to save new image", err)
+		}
+		oldEvent.ImageURL = dto.ImageUrl
+	}
+
+	// ۳. ذخیره در دیتابیس (فراخوانی متد اصلاح شده ریپو)
+	if err := s.repo.UpdateEvent(oldEvent); err != nil {
+		return apperrors.New(500, "Update failed", err)
+	}
+	if err := s.redis.DeleteCache(ctx, "events:active"); err != nil {
+		log.Printf("[WARN] Failed to invalidate Redis cache after event activation: %v", err)
+	}
+
+	return nil
+}
+
+func (s *EventService) DeleteEvent(id string) *apperrors.AppError {
+	ctx := context.Background()
+	lastFile, err := s.repo.FindByID(id)
+	if err != nil {
+		return apperrors.New(http.StatusInternalServerError, "Error retrieving event list.", err)
+	}
+	err = s.repo.DeleteEvent(id)
+	if err != nil {
+		return apperrors.New(http.StatusInternalServerError, "Error retrieving event list.", err)
+	}
+	err = os.Remove(lastFile.ImageURL)
+	if err != nil {
+		return apperrors.New(http.StatusInternalServerError, "Error retrieving event list.", err)
+	}
+	if err := s.redis.DeleteCache(ctx, "events:active"); err != nil {
+		log.Printf("[WARN] Failed to invalidate Redis cache after event activation: %v", err)
+	}
+	return nil
+}
+
+// public
+func (s *EventService) GetPublicEvents(ctx context.Context, page, limit int, search, location string) (*PaginatedEventsResponse, error) {
+   
+    cacheKey := fmt.Sprintf("events:public:p%d:l%d:s:%s:l:%s", page, limit, search, location)
+
+    var response PaginatedEventsResponse
+    found, _ := s.redis.GetCache(ctx, cacheKey, &response)
+    if found {
+        return &response, nil
+    }
+
+    events, totalItems, err := s.repo.GetEventsPaginated(page, limit, search, location, "active")
+    if err != nil {
+        return nil, err
+    }
+
+    totalPages := int((totalItems + int64(limit) - 1) / int64(limit))
+    response = PaginatedEventsResponse{
+        TotalItems:  totalItems,
+        TotalPages:  totalPages,
+        CurrentPage: page,
+        Limit:       limit,
+        Events:      events,
+    }
+
+    _ = s.redis.SetCache(ctx, cacheKey, response, 10*time.Minute)
+    return &response, nil
+}
+
+// (Protected)
+func (s *EventService) GetAdminEvents(page, limit int, search, location string) (*PaginatedEventsResponse, *apperrors.AppError) {
+    // ارسال رشته خالی برای status (همه را می‌آورد)
+    events, totalItems, err := s.repo.GetEventsPaginated(page, limit, search, location, "")
+    if err != nil {
+        return nil, apperrors.New(http.StatusInternalServerError, "Failed to retrieve events", err)
+    }
+
+    totalPages := int((totalItems + int64(limit) - 1) / int64(limit))
+    return &PaginatedEventsResponse{
+        TotalItems:  totalItems,
+        TotalPages:  totalPages,
+        CurrentPage: page,
+        Limit:       limit,
+        Events:      events,
+    }, nil
 }

@@ -173,44 +173,10 @@ func (p *PostgresDB) GetEventSeatsWithStatus(eventID uint) ([]models.SeatStatus,
 	return statuses, nil
 }
 
-func (p *PostgresDB) GetPaginatedEvents(page, limit int, search, location string) ([]models.Event, int64, error) {
-	var events []models.Event
-	var total int64
-
-	// ایجاد یک کوئری پایه روی مدل ایونت
-	query := p.DB.Model(&models.Event{})
-
-	// ۱. اعمال سرچ اختیاری روی عنوان (Case-Insensitive)
-	if search != "" {
-		searchTerm := "%" + search + "%"
-		// سرچ هم‌زمان روی عنوان یا لوکیشن ایونت
-		query = query.Where("title ILIKE ? OR location ILIKE ?", searchTerm, searchTerm)
-	}
-
-	// ۲. اعمال فیلتر اختیاری روی مکان
-	if location != "" {
-		query = query.Where("location = ?", location)
-	}
-
-	// ۳. گرفتن تعداد کل رکوردها با فیلترهای اعمال شده (برای متادیتای فرانت‌آند)
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	// ۴. اعمال صفحه‌بندی و دریافت دیتا
-	offset := (page - 1) * limit
-	err := query.Offset(offset).Limit(limit).Order("created_at DESC").Find(&events).Error
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return events, total, nil
-}
-
-func (p *PostgresDB) GetTicketByRef(ref string) (*models.Ticket, error) {
+func (p *PostgresDB) GetTicketByRef(ref string) (models.Ticket, error) {
 	var ticket models.Ticket
 	// استفاده از Preload برای گرفتن دیتایِ ایونت و صندلی همراه با تیکت
 	err := p.DB.Preload("Event").Preload("Seat").Where("ticket_ref = ?", ref).First(&ticket).Error
-	return &ticket, err
+	return ticket, err
 
 }

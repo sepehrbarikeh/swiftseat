@@ -51,4 +51,5 @@ func InitDB(config *config.Config) *PostgresDB {
 	return &PostgresDB{
 		DB: database,
 	}
+
 }

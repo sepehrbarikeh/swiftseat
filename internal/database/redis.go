@@ -1,59 +1,63 @@
 package database
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "log"
-    "time"
-    "github.com/redis/go-redis/v9"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"swift-seat/internal/config"
+	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type RedisClient struct {
-    Client *redis.Client
+	Client *redis.Client
+	config *config.Config
 }
 
-func InitRedis() *RedisClient {
-    rdb := redis.NewClient(&redis.Options{
-        Addr:     "localhost:6379",
-        Password: "MySuperSecureRedisPassword", // bitnami password
-        DB:       0,
-    })
+func InitRedis(cfg *config.Config) *RedisClient {
+	addr := fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort)
+	pwd := cfg.RedisPassword
+	db := cfg.RedisDB
 
-    // پینگ برای اطمینان از سلامت کانکشن
-    ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-    defer cancel()
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     addr,
+		Password: pwd,
+		DB:       db,
+	})
 
-    if _, err := rdb.Ping(ctx).Result(); err != nil {
-        log.Fatalf("❌ Redis Docker connection error : %v", err)
-    }
 
-    fmt.Println("🚀 Redis (Bitnami) connected")
-    return &RedisClient{Client: rdb}
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	if _, err := rdb.Ping(ctx).Result(); err != nil {
+		log.Fatalf("❌ Redis connection error : %v", err)
+	}
+
+	fmt.Printf("🚀 Redis connected (%s)\n", addr)
+	return &RedisClient{Client: rdb}
 }
 
-// SetCache دیتای ساختاریافته رو به جی‌سان تبدیل می‌کنه و می‌فرسته روی رم
 func (r *RedisClient) SetCache(ctx context.Context, key string, data interface{}, ttl time.Duration) error {
-    jsonData, err := json.Marshal(data)
-    if err != nil {
-        return err
-    }
-    return r.Client.Set(ctx, key, jsonData, ttl).Err()
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return r.Client.Set(ctx, key, jsonData, ttl).Err()
 }
 
-// GetCache دیتای متنی رو می‌گیره و تبدیلش می‌کنه به استراکت گو
+
 func (r *RedisClient) GetCache(ctx context.Context, key string, dest interface{}) (bool, error) {
-    val, err := r.Client.Get(ctx, key).Result()
-    if err == redis.Nil {
-        return false, nil // Cache Miss
-    } else if err != nil {
-        return false, err // 
-    }
+	val, err := r.Client.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return false, nil // Cache Miss
+	} else if err != nil {
+		return false, err //
+	}
 
-    return true, json.Unmarshal([]byte(val), dest) // Cache Hit
+	return true, json.Unmarshal([]byte(val), dest) // Cache Hit
 }
-
-
 
 // DeleteCache
 func (r *RedisClient) DeleteCache(ctx context.Context, keys ...string) error {

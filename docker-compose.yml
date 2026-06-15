@@ -26,6 +26,8 @@ services:
       - redis
     ports:
       - "8080:8080"
+    volumes:
+      - ./config.docker.yml:/app/config.yml:ro
 
 volumes:
   pgdata:

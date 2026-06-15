@@ -20,7 +20,7 @@ type Config struct {
 	RedisHost     string
 	RedisPort     string
 	RedisPassword string
-	RedisDB     string
+	RedisDB     int
 
 	JWTSecret string
 
@@ -52,7 +52,7 @@ func LoadConfig(path string) *Config {
 		RedisHost:     viper.GetString("redis.host"),
 		RedisPort:     viper.GetString("redis.port"),
 		RedisPassword: viper.GetString("redis.password"),
-		RedisDB:     viper.GetString("redis.db"),
+		RedisDB:     viper.GetInt("redis.db"),
 
 		JWTSecret: viper.GetString("jwt.secret"),
 

@@ -42,12 +42,14 @@ func main() {
 	// Initialize the database connection
 	db := repository.InitDB(cfg)
 
+	db.SeedAdmin()
+
 	token := token.New(cfg.JWTSecret)
 
 	fmt.Println("💾 Database connection established:", db.DB)
 	fmt.Println("💎 The SwiftSeat engine is ready for use.")
     
-	rds := database.InitRedis()
+	rds := database.InitRedis(cfg)
 
 	sseHub := sse.NewHub()
     

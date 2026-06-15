@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"swift-seat/internal/service"
 
 	"github.com/gofiber/fiber/v2"
@@ -20,6 +21,10 @@ type RegisterDTO struct {
 type LoginDTO struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+type UpdateRoleRequest struct {
+    Role string `json:"role" validate:"required,oneof=admin user"`
 }
 
 func NewUserHandler(svc *service.UserService) *UserHandler {
@@ -94,4 +99,26 @@ func (h *UserHandler) Login(c *fiber.Ctx) error {
 		"token":  token,
 		"type":   "Bearer",
 	})
+}
+
+
+func (h *UserHandler) ChangeUserRole(c *fiber.Ctx) error {
+    userID := c.Params("id")
+    idUint, _ := strconv.Atoi(userID)
+
+    var req UpdateRoleRequest
+    if err := c.BodyParser(&req); err != nil {
+        return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
+    }
+
+    // ولیدیشن ساده (اگر از پکیج validator استفاده می‌کنی اینجا فراخوانی کن)
+    if req.Role != "admin" && req.Role != "user" {
+        return c.Status(400).JSON(fiber.Map{"error": "Invalid role"})
+    }
+
+    if err := h.svc.UpdateUserRole(uint(idUint), req.Role); err != nil {
+        return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+    }
+
+    return c.Status(200).JSON(fiber.Map{"message": "Role updated successfully"})
 }

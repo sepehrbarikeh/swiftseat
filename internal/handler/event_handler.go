@@ -1,21 +1,32 @@
 package handlers
 
 import (
+	"fmt"
+	"mime/multipart"
 	"net/http"
-	"time"
-
+	"path/filepath"
+	"strconv"
+	"strings"
 	"swift-seat/internal/service"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
-
 type CreateEventRequest struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Location    string `json:"location"`
-	StartTime   string `json:"start_time"`
-	Rows        int    `json:"rows"`
-	SeatsPerRow int    `json:"seats_per_row"`
+    Title       string                `form:"title"`
+    Description string                `form:"description"`
+    Location    string                `form:"location"`
+    StartTime   string                `form:"start_time"`
+    Rows        int                   `form:"rows"`
+    SeatsPerRow int                   `form:"seats_per_row"`
+    Image       *multipart.FileHeader `form:"image"` // برای دریافت فایل
+}
+
+type UpdateEventRequest struct {
+    Title       string                `form:"title"`       // فقط اطلاعاتی که کاربر مجاز است ویرایش کند
+    Description string                `form:"description"`
+    Location    string                `form:"location"`
+    Image       *multipart.FileHeader `form:"image"`       // فایلی که می‌خواهیم آپلود کنیم
 }
 
 // @Summary Create an event
@@ -30,53 +41,65 @@ type CreateEventRequest struct {
 // @Failure 401 {object} map[string]interface{}
 // @Router /api/events [post]
 func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
-	var req CreateEventRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
-	}
+    title := c.FormValue("title")
+    description := c.FormValue("description")
+    location := c.FormValue("location")
+    startTimeStr := c.FormValue("start_time")
+    rows, _ := strconv.Atoi(c.FormValue("rows"))
+    seatsPerRow, _ := strconv.Atoi(c.FormValue("seats_per_row"))
 
-	if req.Title == "" || req.Location == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Event title and location cannot be empty",
-		})
-	}
-	if req.Rows <= 0 || req.SeatsPerRow <= 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Number of rows and seats must be greater than zero",
-		})
-	}
+    if title == "" || location == "" {
+        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Event title and location required"})
+    }
+    if rows <= 0 || seatsPerRow <= 0 {
+        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid seat dimensions"})
+    }
+    // ۴. تبدیل زمان
+    parsedTime, err := time.Parse(time.RFC3339, startTimeStr)
+    if err != nil {
+        return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid date format"})
+    }
 
-	parsedTime, err := time.Parse(time.RFC3339, req.StartTime)
-	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid date format",
-		})
-	}
+	   file, err := c.FormFile("image") // 'image' اسم فیلد در فرم فرانت‌اند است
+    var imageURL string
+    if err == nil {
+        // اعتبارسنجی نوع فایل (اختیاری ولی توصیه شده)
+        if !strings.HasPrefix(file.Header.Get("Content-Type"), "image/") {
+            return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Only images allowed"})
+        }
 
-	if parsedTime.Before(time.Now()) {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "he time of the event cannot be in the past.",
-		})
-	}
-	dto := service.CreateEventDTO{
-		Title:       req.Title,
-		Description: req.Description,
-		Location:    req.Location,
-		StartTime:   parsedTime,
-		Rows:        req.Rows,
-		SeatsPerRow: req.SeatsPerRow,
-	}
+        // تغییر نام برای جلوگیری از تداخل (استفاده از زمان و نام اصلی)
+        filename := fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename)
+        savePath := filepath.Join("uploads", filename)
+        
+        if err := c.SaveFile(file, savePath); err != nil {
+            return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "Could not save image"})
+        }
+        imageURL = "/uploads/" + filename // مسیری که در دیتابیس ذخیره می‌کنی
+    }
 
-	event, appErr := h.svc.CreateNewEvent(dto)
-	if appErr != nil {
-		return c.Status(appErr.StatusCode).JSON(appErr)
-	}
+    // ۵. آماده‌سازی DTO (فیلد جدید ImageURL را اضافه کن)
+    dto := service.CreateEventDTO{
+        Title:       title,
+        Description: description,
+        Location:    location,
+        StartTime:   parsedTime,
+        Rows:        rows,
+        SeatsPerRow: seatsPerRow,
+        ImageUrl:    imageURL, // 👈 اینجا اضافه شد
+    }
 
-	return c.Status(http.StatusCreated).JSON(fiber.Map{
-		"message":  "event created",
-		"event_id": event.ID,
-	})
+    event, appErr := h.svc.CreateNewEvent(dto)
+    if appErr != nil {
+        return c.Status(appErr.StatusCode).JSON(appErr)
+    }
+
+    return c.Status(http.StatusCreated).JSON(fiber.Map{
+        "message":  "event created",
+        "event_id": event.ID,
+    })
 }
+
 
 func (h *EventHandler) GetEvents(c *fiber.Ctx) error {
 
@@ -92,3 +115,5 @@ func (h *EventHandler) GetEvents(c *fiber.Ctx) error {
 		"data":   events,
 	})
 }
+
+

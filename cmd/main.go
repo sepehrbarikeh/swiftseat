@@ -29,7 +29,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	// load settings from config.yaml
-	cfg := config.LoadConfig("../")
+	cfg := config.LoadConfig("./")
 
 	docs.SwaggerInfo.Title = "SwiftSeat API"
 	docs.SwaggerInfo.Description = "SwiftSeat REST API documentation"

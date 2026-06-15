@@ -31,9 +31,14 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 		},
 	})
 
-		// Swagger UI
+	// Swagger UI
 	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status": "ok",
+		})
+	})
 
 	api := app.Group("/api")
 
@@ -46,12 +51,19 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 	// events routes //
 	api.Get("/events", seatHandler.GetEvents)
 
-	secured := api.Group("/", middleware.AuthRequired())
-
-	secured.Post("/events", eventHandler.CreateEvent)
+	secured := api.Group("/", middleware.AuthRequired)
 
 	// seats routes
 	secured.Post("/seats/reserve", seatLimiter, seatHandler.Reserve)
 	secured.Post("/seats/confirm-payment", seatHandler.ConfirmPayment)
-	secured.Get("/tickets/my", seatHandler.GetMyTickets)
+	secured.Get("/user/tickets", seatHandler.GetMyTickets)
+
+	// admin routes
+	admin := secured.Group("/", middleware.AdminOnly)
+	admin.Post("/users/:id/role", userHandler.ChangeUserRole)
+	admin.Post("/events", eventHandler.CreateEvent)
+
+	admin.Put("/events/:id", eventHandler.UpdateEvent)
+	admin.Delete("/events/:id", eventHandler.DeleteEvent)
+	admin.Get("/tickets/validate/:ref", seatHandler.ValidateTicket)
 }

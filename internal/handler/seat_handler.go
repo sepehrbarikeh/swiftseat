@@ -111,7 +111,7 @@ func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
-// @Router /api/tickets/my [get]
+// @Router /api/user/tickets [get]
 func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
 	// استخراج آیدی کاربر از توکن JWT
 	userID := c.Locals("userID").(uint)
@@ -199,4 +199,27 @@ func (h *SeatHandler) GetEvents(c *fiber.Ctx) error {
 		"status": "success",
 		"data":   res,
 	})
+}
+
+
+
+// ادمین کد تیکت را می‌فرستد و ما وضعیتش را چک می‌کنیم
+func (h *SeatHandler) ValidateTicket(c *fiber.Ctx) error {
+    ref := c.Params("ref")
+    
+    ticket, err := h.svc.GetTicketByRef(ref)
+    if err != nil {
+        return c.Status(404).JSON(fiber.Map{"message": "Ticket not found or invalid"})
+    }
+
+    return c.JSON(fiber.Map{
+        "status": "valid",
+        "ticket": fiber.Map{
+            "id":          ticket.ID,
+            "event":       ticket.Event.Title,
+            "seat":        ticket.Seat.SeatNumber,
+            "owner_id":    ticket.UserID,
+            "paid_amount": ticket.PaidAmount,
+        },
+    })
 }

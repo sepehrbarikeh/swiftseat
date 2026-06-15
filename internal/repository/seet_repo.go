@@ -206,3 +206,11 @@ func (p *PostgresDB) GetPaginatedEvents(page, limit int, search, location string
 
 	return events, total, nil
 }
+
+func (p *PostgresDB) GetTicketByRef(ref string) (*models.Ticket, error) {
+	var ticket models.Ticket
+	// استفاده از Preload برای گرفتن دیتایِ ایونت و صندلی همراه با تیکت
+	err := p.DB.Preload("Event").Preload("Seat").Where("ticket_ref = ?", ref).First(&ticket).Error
+	return &ticket, err
+
+}

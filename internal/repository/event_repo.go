@@ -61,14 +61,12 @@ func (p *PostgresDB) BulkCreateSeats(seats []models.SeatStatus) error {
 }
 
 func (p *PostgresDB) UpdateEventStatus(eventID uint, status string) error {
-    return p.DB.Model(&models.Event{}).Where("id = ?", eventID).Update("status", status).Error
+	return p.DB.Model(&models.Event{}).Where("id = ?", eventID).Update("status", status).Error
 }
-
 
 func (p *PostgresDB) GetActiveEvents() ([]models.Event, error) {
 	var events []models.Event
 
-	
 	err := p.DB.
 		Where("status = ?", "active").
 		Order("start_time asc").
@@ -80,3 +78,25 @@ func (p *PostgresDB) GetActiveEvents() ([]models.Event, error) {
 
 	return events, nil
 }
+
+// func (p *PostgresDB) UpdateEvent(eventID uint, status string) error {
+
+// }
+
+// func (p *PostgresDB) DeletEvent(id uint) error {
+// 	return p.DB.Delete(&models.Event{}, id).Error
+
+// 	lastFile, err := s.repo.FindByID(ctx, id, userID)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = s.repo.DeleteMedia(ctx, id, userID)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = os.Remove(lastFile.FilePath)
+// 	if err != nil {
+// 		return errs.Internal(constant.Internal, err)
+// 	}
+// 	return nil
+// }

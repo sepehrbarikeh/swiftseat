@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"net/http"
 	"strings"
 	"swift-seat/internal/pkg/Token"
 
@@ -18,29 +17,24 @@ func NewAuthMiddleware(authService *token.Token) *AuthMiddleware {
 	}
 }
 
-func (t *AuthMiddleware) AuthRequired() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		authHeader := c.Get("Authorization")
-		if authHeader == "" {
-			return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized:"})
-		}
+func (t *AuthMiddleware) AuthRequired(c *fiber.Ctx) error {
+    authHeader := c.Get("Authorization")
+    if authHeader == "" {
+        return c.Status(401).JSON(fiber.Map{"error": "Missing token"})
+    }
 
-		// ۲. جداسازی کلمه Bearer از اصل توکن
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid token format"})
-		}
+    // فرض می‌کنیم توکن با "Bearer " شروع می‌شود
+    tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+    
+    // استفاده از سرویس توکن شما برای وریفای کردن
+    claims, err := t.authService.VerifyToken(tokenString)
+    if err != nil {
+        return c.Status(401).JSON(fiber.Map{"error": "Invalid token"})
+    }
 
-		tokenString := parts[1]
+    // مهم: ست کردن اطلاعات در کانتکست
+    c.Locals("user_id", claims.UserID)
+    c.Locals("role", claims.Role) // این همان جایی است که AdminOnly می‌خواند
 
-		claims, err := t.authService.VerifyToken(tokenString)
-		if err != nil {
-			return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired token"})
-		}
-
-		
-		c.Locals("userID", claims.UserID)
-
-		return c.Next() 
-	}
+    return c.Next()
 }

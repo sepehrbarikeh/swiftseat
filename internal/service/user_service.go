@@ -32,7 +32,7 @@ func (s *UserService) Register(name, email, password string) error {
 		Name:         name,
 		Email:        email,
 		PasswordHash: string(hashedPassword), // 👈 تغییر نام فیلد به استراکت جدیدت
-		Role:         "customer",             // خودش دیفالت داره ولی دستی هم بذاری اوکیه
+		Role:         "user",             // خودش دیفالت داره ولی دستی هم بذاری اوکیه
 	}
 
 	return s.repo.CreateUser(user)
@@ -56,4 +56,12 @@ func (s *UserService) Login(email, password string) (string, error) {
 	}
 
 	return token, nil
+}
+
+func (s *UserService) UpdateUserRole(userID uint, newRole string) error {
+	err := s.repo.UpdateUserRole(userID, newRole)
+	if err != nil {
+		return err
+	}
+	return nil
 }

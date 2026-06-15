@@ -11,21 +11,23 @@ type User struct {
 	Name         string    `gorm:"type:varchar(100);not null" json:"name"`
 	Email        string    `gorm:"type:varchar(150);unique;not null" json:"email"`
 	PasswordHash string    `gorm:"type:varchar(255);not null" json:"-"`
-	Role         string    `gorm:"type:varchar(20);default:'customer'" json:"role"`
+	Role         string    `gorm:"type:varchar(20);default:'user'" json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-//
+
 type Event struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	Title       string    `gorm:"type:varchar(200);not null" json:"title"`
 	Description string    `gorm:"type:text" json:"description"`
+	ImageURL    string `gorm:"size:255"`
 	Location    string    `gorm:"type:varchar(200);not null" json:"location"`
 	StartTime   time.Time `gorm:"not null" json:"start_time"`
 	TotalSeats  int       `gorm:"not null" json:"total_seats"`
 	CreatedAt   time.Time `json:"created_at"`
 	Seats       []Seat    `json:"seats,omitempty"`
 	Status    string    `gorm:"type:varchar(30);default:'creating_seats';not null" json:"status"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 type Seat struct {

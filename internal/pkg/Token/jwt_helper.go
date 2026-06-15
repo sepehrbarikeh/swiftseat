@@ -28,6 +28,7 @@ type JWTClaims struct {
 func (t Token) GenerateToken(userID uint,role string) (string, error) {
 	claims := JWTClaims{
 		UserID: userID,
+		Role: role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

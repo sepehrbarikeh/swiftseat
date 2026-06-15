@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"sync"
 	"time"
@@ -17,6 +18,14 @@ type EventService struct {
 	repo  *repository.PostgresDB
 	redis *database.RedisClient
 	wg    *sync.WaitGroup // 👈 تزریق پوینتر WaitGroup برای مدیریت فرآیندهای پس‌زمینه
+}
+
+
+type UpdateEventRequest struct {
+    Title       string                `form:"title"`       // فقط اطلاعاتی که کاربر مجاز است ویرایش کند
+    Description string                `form:"description"`
+    Location    string                `form:"location"`
+    Image       *multipart.FileHeader `form:"image"`       // فایلی که می‌خواهیم آپلود کنیم
 }
 
 func NewEventService(repo *repository.PostgresDB, wg *sync.WaitGroup, redis *database.RedisClient) *EventService {
@@ -34,6 +43,7 @@ type CreateEventDTO struct {
 	StartTime   time.Time
 	Rows        int
 	SeatsPerRow int
+	ImageUrl    string
 }
 
 func (s *EventService) GetActiveEvents(ctx context.Context) ([]models.Event, string, error) {
@@ -73,6 +83,7 @@ func (s *EventService) CreateNewEvent(dto CreateEventDTO) (*models.Event, *apper
 		StartTime:   dto.StartTime,
 		TotalSeats:  dto.Rows * dto.SeatsPerRow,
 		Status:      "creating_seats",
+		ImageURL:    dto.ImageUrl,
 	}
 
 	if err := s.repo.CreateEvent(event); err != nil {

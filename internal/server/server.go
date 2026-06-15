@@ -48,6 +48,10 @@ func (s *Server) StartServer() {
 		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
 	}))
 
+	// saved file location
+	app.Static("/uploads", "../../uploads")
+
+
 	router.SetupRoutes(app, s.eventHandler, s.seatHandler, *s.userHandler, s.authMiddleware)
 
 	fmt.Println("💎 SwiftSeat Server is running on port", s.port)

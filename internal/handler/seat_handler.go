@@ -42,6 +42,7 @@ type ConfirmPaymentRequest struct {
 func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
 	var req ReserveSeatRequest
 
+
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad request"})
 	}
@@ -50,7 +51,9 @@ func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "seat_number and event_id are required"})
 	}
 
-	userID := c.Locals("userID").(uint)
+
+	userID := c.Locals("user_id").(uint)
+
 
 	appErr := h.svc.HoldSeat(req.SeatNumber, req.EventID, userID)
 	if appErr != nil {
@@ -80,7 +83,7 @@ func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad Request"})
 	}
 
-	userID := c.Locals("userID").(uint)
+	userID := c.Locals("user_id").(uint)
 
 	ticket, appErr := h.svc.ConfirmPayment(req.SeatNumber, req.EventID, userID, req.Amount)
 	if appErr != nil {
@@ -172,24 +175,35 @@ func (h *SeatHandler) GetSeatMap(c *fiber.Ctx) error {
 	})
 }
 
-
+// @Summary Validate a ticket
+// @Description Validate a ticket reference and return ticket details
+// @Tags Tickets
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param ref path string true "Ticket reference"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/tickets/validate/{ref} [get]
 // ادمین کد تیکت را می‌فرستد و ما وضعیتش را چک می‌کنیم
 func (h *SeatHandler) ValidateTicket(c *fiber.Ctx) error {
-    ref := c.Params("ref")
-    
-    ticket, err := h.svc.GetTicketByRef(ref)
-    if err != nil {
-        return c.Status(404).JSON(fiber.Map{"message": "Ticket not found or invalid"})
-    }
+	ref := c.Params("ref")
 
-    return c.JSON(fiber.Map{
-        "status": "valid",
-        "ticket": fiber.Map{
-            "id":          ticket.ID,
-            "event":       ticket.Event.Title,
-            "seat":        ticket.Seat.SeatNumber,
-            "owner_id":    ticket.UserID,
-            "paid_amount": ticket.PaidAmount,
-        },
-    })
+	ticket, err := h.svc.GetTicketByRef(ref)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"message": "Ticket not found or invalid"})
+	}
+
+	return c.JSON(fiber.Map{
+		"status": "valid",
+		"ticket": fiber.Map{
+			"id":          ticket.ID,
+			"event":       ticket.Event.Title,
+			"seat":        ticket.Seat.SeatNumber,
+			"owner_id":    ticket.UserID,
+			"paid_amount": ticket.PaidAmount,
+		},
+	})
 }

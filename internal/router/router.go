@@ -2,7 +2,7 @@ package router
 
 import (
 	"fmt"
-	"swift-seat/internal/handler"
+	handlers "swift-seat/internal/handler"
 	"swift-seat/internal/middleware"
 	"time"
 
@@ -11,7 +11,7 @@ import (
 	fiberSwagger "github.com/swaggo/fiber-swagger"
 )
 
-func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandler *handlers.SeatHandler, userHandler handlers.UserHandler, middleware *middleware.AuthMiddleware) {
+func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandler *handlers.SeatHandler, userHandler handlers.UserHandler, sseHandler *handlers.SSEHandler, middleware *middleware.AuthMiddleware) {
 
 	seatLimiter := limiter.New(limiter.Config{
 		Max:        5,
@@ -34,14 +34,12 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 	// Swagger UI
 	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
-	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"status": "ok",
-		})
-	})
+	app.Get("/health", HealthCheck)
 
 	api := app.Group("/api")
-	api.Get("/",eventHandler.GetHomeData)
+	api.Get("/", eventHandler.GetHomeData)
+	
+	app.Get("/api/events/stream", sseHandler.StreamEvents)
 
 	api.Get("/events/:event_id/seats", seatHandler.GetSeatMap)
 
@@ -50,7 +48,7 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 	api.Post("/login", userHandler.Login)
 
 	// events routes //
-	api.Get("/events",eventHandler.GetEvents)
+	api.Get("/events", eventHandler.GetEvents)
 
 	secured := api.Group("/", middleware.AuthRequired)
 
@@ -67,5 +65,18 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 	admin.Put("/events/:id", eventHandler.UpdateEvent)
 	admin.Delete("/events/:id", eventHandler.DeleteEvent)
 	admin.Get("/tickets/validate/:ref", seatHandler.ValidateTicket)
-	admin.Get("/events/all",eventHandler.ListEvents)
+	admin.Get("/events/all", eventHandler.ListEvents)
+}
+
+// @Summary Health check
+// @Description Returns service health status
+// @Tags Diagnostics
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /health [get]
+func HealthCheck(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"status": "ok",
+	})
 }

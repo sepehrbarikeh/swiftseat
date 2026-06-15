@@ -33,9 +33,15 @@ type UpdateEventRequest struct {
 // @Description Create a new event in the system
 // @Tags Events
 // @Security ApiKeyAuth
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
-// @Param event body CreateEventRequest true "Event payload"
+// @Param title formData string true "Event title"
+// @Param description formData string false "Event description"
+// @Param location formData string true "Event location"
+// @Param start_time formData string true "Event start time in RFC3339"
+// @Param rows formData int true "Number of rows"
+// @Param seats_per_row formData int true "Number of seats per row"
+// @Param image formData file false "Event image"
 // @Success 201 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
@@ -90,7 +96,22 @@ func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 	})
 }
 
-// ۲. نسخه ساده‌تر و بهینه برای آپدیت (با هندل کردنِ اختیاریِ فایل)
+// @Summary Update an event
+// @Description Update an existing event's metadata and optional image
+// @Tags Events
+// @Security ApiKeyAuth
+// @Accept multipart/form-data
+// @Produce json
+// @Param id path int true "Event ID"
+// @Param title formData string false "Event title"
+// @Param description formData string false "Event description"
+// @Param location formData string false "Event location"
+// @Param image formData file false "Event image"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/events/{id} [put]
 func (h *EventHandler) UpdateEvent(c *fiber.Ctx) error {
 	id := c.Params("id")
 
@@ -120,6 +141,18 @@ func (h *EventHandler) UpdateEvent(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(fiber.Map{"message": "event updated"})
 }
 
+// @Summary Delete an event
+// @Description Delete an existing event by ID
+// @Tags Events
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "Event ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/events/{id} [delete]
 func (h *EventHandler) DeleteEvent(c *fiber.Ctx) error {
 	id := c.Params("id")
 	err := h.svc.DeleteEvent(id)
@@ -129,44 +162,76 @@ func (h *EventHandler) DeleteEvent(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(fiber.Map{"message": "event Deleted"})
 }
 
-
-
 // GetEvents (Public)
+// @Summary List public events
+// @Description List events with optional pagination and filtering
+// @Tags Events
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Page size" default(10)
+// @Param search query string false "Search term"
+// @Param location query string false "Location filter"
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/events [get]
 func (h *EventHandler) GetEvents(c *fiber.Ctx) error {
-    page := c.QueryInt("page", 1)
-    limit := c.QueryInt("limit", 10)
-    search := c.Query("search", "")
-    location := c.Query("location", "")
+	page := c.QueryInt("page", 1)
+	limit := c.QueryInt("limit", 10)
+	search := c.Query("search", "")
+	location := c.Query("location", "")
 
-    // فراخوانی سرویس عمومی
-    res, err := h.svc.GetPublicEvents(c.UserContext(), page, limit, search, location)
-    if err != nil {
-        return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch events"})
-    }
+	// فراخوانی سرویس عمومی
+	res, err := h.svc.GetPublicEvents(c.UserContext(), page, limit, search, location)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch events"})
+	}
 
-    return c.Status(http.StatusOK).JSON(fiber.Map{"status": "success", "data": res})
+	return c.Status(http.StatusOK).JSON(fiber.Map{"status": "success", "data": res})
 }
 
 // ListEvents [Protected])
+// @Summary List admin events
+// @Description List events with admin-only details and pagination
+// @Tags Events
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Page size" default(10)
+// @Param search query string false "Search term"
+// @Param location query string false "Location filter"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/events/all [get]
 func (h *EventHandler) ListEvents(c *fiber.Ctx) error {
-    page := c.QueryInt("page", 1)
-    limit := c.QueryInt("limit", 10)
-    search := c.Query("search", "")
-    location := c.Query("location", "")
+	page := c.QueryInt("page", 1)
+	limit := c.QueryInt("limit", 10)
+	search := c.Query("search", "")
+	location := c.Query("location", "")
 
-    // فراخوانی سرویس ادمین
-    res, appErr := h.svc.GetAdminEvents(page, limit, search, location)
-    if appErr != nil {
-        return c.Status(appErr.StatusCode).JSON(appErr)
-    }
+	// فراخوانی سرویس ادمین
+	res, appErr := h.svc.GetAdminEvents(page, limit, search, location)
+	if appErr != nil {
+		return c.Status(appErr.StatusCode).JSON(appErr)
+	}
 
-    return c.Status(http.StatusOK).JSON(fiber.Map{"status": "success", "data": res})
+	return c.Status(http.StatusOK).JSON(fiber.Map{"status": "success", "data": res})
 }
 
+// @Summary Get API home data
+// @Description Retrieve the home dashboard payload for public display
+// @Tags Public
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/ [get]
 func (h *EventHandler) GetHomeData(c *fiber.Ctx) error {
-    data, err := h.svc.GetHomeEvents()
-    if err != nil {
-        return c.Status(500).JSON(fiber.Map{"error": "Failed to load home data"})
-    }
-    return c.JSON(data)
+	data, err := h.svc.GetHomeEvents()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to load home data"})
+	}
+	return c.JSON(data)
 }

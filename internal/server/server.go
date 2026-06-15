@@ -22,9 +22,10 @@ type Server struct {
 	seatHandler    *handlers.SeatHandler
 	authMiddleware *middleware.AuthMiddleware
 	userHandler    *handlers.UserHandler
+	sseHandler     *handlers.SSEHandler
 }
 
-func NewServer(port string, wg *sync.WaitGroup, eventHandler *handlers.EventHandler, userHandler *handlers.UserHandler, seatHandler *handlers.SeatHandler, authMiddleware *middleware.AuthMiddleware) *Server {
+func NewServer(port string, wg *sync.WaitGroup, eventHandler *handlers.EventHandler, userHandler *handlers.UserHandler, seatHandler *handlers.SeatHandler,sseHandler *handlers.SSEHandler, authMiddleware *middleware.AuthMiddleware) *Server {
 	return &Server{
 		port:           port,
 		wg:             wg,
@@ -32,6 +33,7 @@ func NewServer(port string, wg *sync.WaitGroup, eventHandler *handlers.EventHand
 		seatHandler:    seatHandler,
 		authMiddleware: authMiddleware,
 		userHandler:    userHandler,
+		sseHandler: sseHandler,
 	}
 }
 
@@ -51,8 +53,7 @@ func (s *Server) StartServer() {
 	// saved file location
 	app.Static("/uploads", "../../uploads")
 
-
-	router.SetupRoutes(app, s.eventHandler, s.seatHandler, *s.userHandler, s.authMiddleware)
+	router.SetupRoutes(app, s.eventHandler, s.seatHandler, *s.userHandler,s.sseHandler, s.authMiddleware)
 
 	fmt.Println("💎 SwiftSeat Server is running on port", s.port)
 	go func() {

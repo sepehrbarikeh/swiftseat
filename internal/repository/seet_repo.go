@@ -132,7 +132,6 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userI
 	if err != nil {
 		return nil, err
 	}
-
 	return &ticket, nil
 }
 
@@ -179,4 +178,15 @@ func (p *PostgresDB) GetTicketByRef(ref string) (models.Ticket, error) {
 	err := p.DB.Preload("Event").Preload("Seat").Where("ticket_ref = ?", ref).First(&ticket).Error
 	return ticket, err
 
+}
+
+func (p *PostgresDB) GetAvailableSeatCount(eventID uint) (int64, error) {
+	var count int64
+	// فرض بر این است که جدولِ تو seat_statuses است
+	// و صندلی‌های آزاد وضعیت‌شون 'available' هست
+	err := p.DB.Model(&models.SeatStatus{}).
+		Where("event_id = ? AND status = ?", eventID, "available").
+		Count(&count).Error
+
+	return count, err
 }

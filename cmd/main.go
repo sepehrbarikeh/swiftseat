@@ -21,6 +21,7 @@ import (
 	"swift-seat/internal/repository"
 	"swift-seat/internal/server"
 	"swift-seat/internal/service"
+	"swift-seat/internal/sse"
 	"sync"
 )
 
@@ -45,7 +46,7 @@ func main() {
 
 	fmt.Println("💾 Database connection established:", db.DB)
 	fmt.Println("💎 The SwiftSeat engine is ready for use.")
-
+    
 	rds := database.InitRedis()
 
 	cronWorker := worker.NewCleanupWorker(db, cfg.CleanupInterval)
@@ -58,12 +59,18 @@ func main() {
 	eventSvc := service.NewEventService(db, &wg, rds)
 	eventHandler := handlers.NewEventHandler(eventSvc)
 
+	sseHub := sse.NewHub()
+    
+    // ۲. ساختِ هندلرها و تزریقِ Hub
+	sseHandler := handlers.NewSSEHandler(sseHub)
+
 	// seat service
-	seatSvc := service.NewSeatService(db, cfg.SeetLock)
+	seatSvc := service.NewSeatService(db, cfg.SeetLock,sseHub)
 	seetHandler := handlers.NewSeatHandler(seatSvc)
 
+
 	authMiddlaware := middleware.NewAuthMiddleware(token)
-	server := server.NewServer(cfg.AppPort, &wg, eventHandler, userHandler, seetHandler, authMiddlaware)
+	server := server.NewServer(cfg.AppPort, &wg, eventHandler, userHandler, seetHandler,sseHandler, authMiddlaware)
 	server.StartServer()
 
 }

@@ -9,21 +9,6 @@ definitions:
       seat_number:
         type: string
     type: object
-  handlers.CreateEventRequest:
-    properties:
-      description:
-        type: string
-      location:
-        type: string
-      rows:
-        type: integer
-      seats_per_row:
-        type: integer
-      start_time:
-        type: string
-      title:
-        type: string
-    type: object
   handlers.LoginDTO:
     properties:
       email:
@@ -48,6 +33,16 @@ definitions:
         description: "\U0001F680 یکپارچه‌سازی با ساختار جدید"
         type: string
     type: object
+  handlers.UpdateRoleRequest:
+    properties:
+      role:
+        enum:
+        - admin
+        - user
+        type: string
+    required:
+    - role
+    type: object
 host: localhost
 info:
   contact: {}
@@ -55,6 +50,27 @@ info:
   title: SwiftSeat API
   version: "1.0"
 paths:
+  /api/:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve the home dashboard payload for public display
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get API home data
+      tags:
+      - Public
   /api/events:
     get:
       consumes:
@@ -87,20 +103,52 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Search events
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List public events
       tags:
       - Events
     post:
       consumes:
-      - application/json
+      - multipart/form-data
       description: Create a new event in the system
       parameters:
-      - description: Event payload
-        in: body
-        name: event
+      - description: Event title
+        in: formData
+        name: title
         required: true
-        schema:
-          $ref: '#/definitions/handlers.CreateEventRequest'
+        type: string
+      - description: Event description
+        in: formData
+        name: description
+        type: string
+      - description: Event location
+        in: formData
+        name: location
+        required: true
+        type: string
+      - description: Event start time in RFC3339
+        in: formData
+        name: start_time
+        required: true
+        type: string
+      - description: Number of rows
+        in: formData
+        name: rows
+        required: true
+        type: integer
+      - description: Number of seats per row
+        in: formData
+        name: seats_per_row
+        required: true
+        type: integer
+      - description: Event image
+        in: formData
+        name: image
+        type: file
       produces:
       - application/json
       responses:
@@ -151,6 +199,146 @@ paths:
       summary: Get seat map
       tags:
       - Seats
+  /api/events/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an existing event by ID
+      parameters:
+      - description: Event ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete an event
+      tags:
+      - Events
+    put:
+      consumes:
+      - multipart/form-data
+      description: Update an existing event's metadata and optional image
+      parameters:
+      - description: Event ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Event title
+        in: formData
+        name: title
+        type: string
+      - description: Event description
+        in: formData
+        name: description
+        type: string
+      - description: Event location
+        in: formData
+        name: location
+        type: string
+      - description: Event image
+        in: formData
+        name: image
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update an event
+      tags:
+      - Events
+  /api/events/all:
+    get:
+      consumes:
+      - application/json
+      description: List events with admin-only details and pagination
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: limit
+        type: integer
+      - description: Search term
+        in: query
+        name: search
+        type: string
+      - description: Location filter
+        in: query
+        name: location
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List admin events
+      tags:
+      - Events
   /api/login:
     post:
       consumes:
@@ -287,7 +475,46 @@ paths:
       summary: Reserve a seat
       tags:
       - Seats
-  /api/tickets/my:
+  /api/tickets/validate/{ref}:
+    get:
+      consumes:
+      - application/json
+      description: Validate a ticket reference and return ticket details
+      parameters:
+      - description: Ticket reference
+        in: path
+        name: ref
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Validate a ticket
+      tags:
+      - Tickets
+  /api/user/tickets:
     get:
       consumes:
       - application/json
@@ -310,6 +537,67 @@ paths:
       summary: Get current user's tickets
       tags:
       - Tickets
+  /api/users/{id}/role:
+    post:
+      consumes:
+      - application/json
+      description: Update the role of a user account
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Role change request
+        in: body
+        name: role
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Change user role
+      tags:
+      - Users
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Returns service health status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - Diagnostics
 schemes:
 - http
 securityDefinitions:

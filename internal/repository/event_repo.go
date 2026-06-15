@@ -3,11 +3,16 @@ package repository
 import (
 	"fmt"
 	"swift-seat/internal/models"
+	"time"
 
 	"gorm.io/gorm"
 )
 
-// internal/repository/postgres.go
+
+type SeatCountResult struct {
+    EventID uint
+    Count   int64
+}
 
 // CreateEvent فقط خود ایونت را می‌سازد (کاملاً Sync)
 func (p *PostgresDB) CreateEvent(event *models.Event) error {
@@ -108,4 +113,50 @@ func (p *PostgresDB) GetEventsPaginated(page, limit int, search, location string
     err := query.Offset(offset).Limit(limit).Order("start_time asc").Find(&events).Error
     
     return events, total, err
+}
+
+func (p *PostgresDB) GetAvailableSeatCounts(eventIDs []uint) (map[uint]int64, error) {
+    var results []SeatCountResult
+    
+    // کوئری برای گرفتن تعداد صندلی‌های available به صورت گروهی
+    err := p.DB.Model(&models.SeatStatus{}).
+        Select("event_id, count(*) as count").
+        Where("event_id IN ? AND status = ?", eventIDs, "available").
+        Group("event_id").
+        Scan(&results).Error
+
+    if err != nil {
+        return nil, err
+    }
+
+    // تبدیل به مپ برای دسترسی سریع (O(1))
+    counts := make(map[uint]int64)
+    for _, res := range results {
+        counts[res.EventID] = res.Count
+    }
+    return counts, nil
+}
+
+// GetPopularEvents ایونت‌هایی با بیشترین صندلی فروخته شده
+func (p *PostgresDB) GetPopularEvents(limit int) ([]models.Event, error) {
+    var events []models.Event
+    err := p.DB.Model(&models.Event{}).
+        Joins("JOIN seat_statuses ON seat_statuses.event_id = events.id").
+        Where("seat_statuses.status = ?", "booked").
+        Group("events.id").
+        Order("count(seat_statuses.id) DESC").
+        Limit(limit).
+        Find(&events).Error
+    return events, err
+}
+
+// GetUpcomingEvents ایونت‌هایی که زمان شروع‌شان نزدیک‌تر است
+func (p *PostgresDB) GetUpcomingEvents(limit int) ([]models.Event, error) {
+    var events []models.Event
+    // فقط ایونت‌های اکتیو و آینده
+    err := p.DB.Where("status = ? AND start_time > ?", "active", time.Now()).
+        Order("start_time ASC").
+        Limit(limit).
+        Find(&events).Error
+    return events, err
 }

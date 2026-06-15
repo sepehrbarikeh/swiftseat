@@ -24,6 +24,12 @@ type EventService struct {
 	wg    *sync.WaitGroup // 👈 تزریق پوینتر WaitGroup برای مدیریت فرآیندهای پس‌زمینه
 }
 
+type EventResponse struct {
+    models.Event
+    AvailableSeats int64 `json:"available_seats"`
+    IsSoldOut      bool  `json:"is_sold_out"`
+}
+
 type UpdateEventRequest struct {
 	Title       string                `form:"title"` // فقط اطلاعاتی که کاربر مجاز است ویرایش کند
 	Description string                `form:"description"`
@@ -199,5 +205,36 @@ func (s *EventService) GetAdminEvents(page, limit int, search, location string) 
         CurrentPage: page,
         Limit:       limit,
         Events:      events,
+    }, nil
+}
+
+// internal/service/event_service.go
+
+func (s *EventService) GetHomeEvents() (map[string][]EventResponse, error) {
+    // گرفتن لیست‌ها
+    popular, _ := s.repo.GetPopularEvents(4)
+    upcoming, _ := s.repo.GetUpcomingEvents(4)
+
+    // تابع کمکی برای ترکیب با صندلی‌ها
+    getWithSeats := func(events []models.Event) []EventResponse {
+        var ids []uint
+        for _, e := range events { ids = append(ids, e.ID) }
+        counts, _ := s.repo.GetAvailableSeatCounts(ids) // همان متدِ دسته‌ای قبلی
+
+        var res []EventResponse
+        for _, e := range events {
+            count := counts[e.ID]
+            res = append(res, EventResponse{
+                Event:          e,
+                AvailableSeats: count,
+                IsSoldOut:      count == 0,
+            })
+        }
+        return res
+    }
+
+    return map[string][]EventResponse{
+        "popular":  getWithSeats(popular),
+        "upcoming": getWithSeats(upcoming),
     }, nil
 }

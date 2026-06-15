@@ -162,3 +162,11 @@ func (h *EventHandler) ListEvents(c *fiber.Ctx) error {
 
     return c.Status(http.StatusOK).JSON(fiber.Map{"status": "success", "data": res})
 }
+
+func (h *EventHandler) GetHomeData(c *fiber.Ctx) error {
+    data, err := h.svc.GetHomeEvents()
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{"error": "Failed to load home data"})
+    }
+    return c.JSON(data)
+}

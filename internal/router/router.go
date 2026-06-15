@@ -41,6 +41,7 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 	})
 
 	api := app.Group("/api")
+	api.Get("/",eventHandler.GetHomeData)
 
 	api.Get("/events/:event_id/seats", seatHandler.GetSeatMap)
 

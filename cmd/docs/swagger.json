@@ -12,7 +12,7 @@
     "host": "localhost",
     "basePath": "/api",
     "paths": {
-        "/api/": {
+        "/": {
             "get": {
                 "description": "Retrieve the home dashboard payload for public display",
                 "consumes": [

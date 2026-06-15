@@ -227,7 +227,7 @@ func (h *EventHandler) ListEvents(c *fiber.Ctx) error {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /api/ [get]
+// @Router / [get]
 func (h *EventHandler) GetHomeData(c *fiber.Ctx) error {
 	data, err := h.svc.GetHomeEvents()
 	if err != nil {

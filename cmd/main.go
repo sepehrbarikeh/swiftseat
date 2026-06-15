@@ -49,7 +49,12 @@ func main() {
     
 	rds := database.InitRedis()
 
-	cronWorker := worker.NewCleanupWorker(db, cfg.CleanupInterval)
+	sseHub := sse.NewHub()
+    
+    // ۲. ساختِ هندلرها و تزریقِ Hub
+	sseHandler := handlers.NewSSEHandler(sseHub)
+
+	cronWorker := worker.NewCleanupWorker(db,cfg.CleanupInterval)
 	cronWorker.Start()
 
 	// user service
@@ -59,10 +64,6 @@ func main() {
 	eventSvc := service.NewEventService(db, &wg, rds)
 	eventHandler := handlers.NewEventHandler(eventSvc)
 
-	sseHub := sse.NewHub()
-    
-    // ۲. ساختِ هندلرها و تزریقِ Hub
-	sseHandler := handlers.NewSSEHandler(sseHub)
 
 	// seat service
 	seatSvc := service.NewSeatService(db, cfg.SeetLock,sseHub)

@@ -42,7 +42,6 @@ type ConfirmPaymentRequest struct {
 func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
 	var req ReserveSeatRequest
 
-
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Bad request"})
 	}
@@ -51,9 +50,7 @@ func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "seat_number and event_id are required"})
 	}
 
-
 	userID := c.Locals("user_id").(uint)
-
 
 	appErr := h.svc.HoldSeat(req.SeatNumber, req.EventID, userID)
 	if appErr != nil {

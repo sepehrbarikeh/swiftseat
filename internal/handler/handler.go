@@ -2,7 +2,6 @@ package handlers
 
 import "swift-seat/internal/service"
 
-
 type EventHandler struct {
 	svc *service.EventService
 }

@@ -117,31 +117,39 @@ func (s *SeatService) GetUserTickets(userID uint) ([]models.Ticket, *apperrors.A
 }
 
 func (s *SeatService) GetEventSeatMap(eventID uint) ([]SeatResponseDTO, *apperrors.AppError) {
-	statuses, err := s.repo.GetEventSeatsWithStatus(eventID)
-	if err != nil {
-		return nil, apperrors.New(http.StatusInternalServerError, "Failed to fetch seat map", err)
-	}
+    statuses, err := s.repo.GetEventSeatsWithStatus(eventID)
+    if err != nil {
+        return nil, apperrors.New(http.StatusInternalServerError, "Failed to fetch seat map", err)
+    }
 
-	var seatMap []SeatResponseDTO
-	now := time.Now()
+    var seatMap []SeatResponseDTO
+    now := time.Now()
 
-	for _, st := range statuses {
-		currentStatus := st.Status
+    for _, st := range statuses {
+        // ۱. تعیین وضعیت پیش‌فرض
+        finalStatus := st.Status
 
-		if st.Status == "reserved" && st.ExpiresAt != nil && st.ExpiresAt.Before(now) {
-			currentStatus = "available"
-		}
+        // ۲. منطقِ آزادسازیِ خودکار (Lazy Expiration)
+        if st.Status == "reserved" {
+            if st.ExpiresAt != nil && st.ExpiresAt.Before(now) {
+                finalStatus = "available"
+            } else {
+                // اگر رزرو هست و هنوز منقضی نشده، صریحاً بگیم رزرو بمونه
+                finalStatus = "reserved" 
+            }
+        }
 
-		seatMap = append(seatMap, SeatResponseDTO{
-			SeatID:     st.SeatID,
-			SeatNumber: st.Seat.SeatNumber,
-			RowName:    st.Seat.RowName,
-			Price:      st.Seat.Price,
-			Status:     currentStatus,
-		})
-	}
+        // ۳. اضافه کردن به لیست با وضعیتِ نهاییِ شفاف
+        seatMap = append(seatMap, SeatResponseDTO{
+            SeatID:     st.SeatID,
+            SeatNumber: st.Seat.SeatNumber,
+            RowName:    st.Seat.RowName,
+            Price:      st.Seat.Price,
+            Status:     finalStatus, // اینجا مطمئنیم که مقدارِ درست ست شده
+        })
+    }
 
-	return seatMap, nil
+    return seatMap, nil
 }
 
 func (s *SeatService) GetTicketByRef(ref string) (*models.Ticket, error) {

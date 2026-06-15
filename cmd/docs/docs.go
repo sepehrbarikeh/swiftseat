@@ -15,7 +15,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/": {
+        "/": {
             "get": {
                 "description": "Retrieve the home dashboard payload for public display",
                 "consumes": [

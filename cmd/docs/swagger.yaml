@@ -50,7 +50,7 @@ info:
   title: SwiftSeat API
   version: "1.0"
 paths:
-  /api/:
+  /:
     get:
       consumes:
       - application/json

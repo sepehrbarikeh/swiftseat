@@ -159,17 +159,21 @@ func (p *PostgresDB) GetUserTickets(userID uint) ([]models.Ticket, error) {
 }
 
 func (p *PostgresDB) GetEventSeatsWithStatus(eventID uint) ([]models.SeatStatus, error) {
-	var statuses []models.SeatStatus
+    var statuses []models.SeatStatus
 
-	err := p.DB.
-		Preload("Seat").
-		Where("event_id = ?", eventID).
-		Find(&statuses).Error
+    err := p.DB.
+        Preload("Seat").
+        Joins("JOIN seats ON seats.id = seat_statuses.seat_id").
+        Where("seat_statuses.event_id = ?", eventID).
+        // جادویِ مرتب‌سازی عددی در پستگرس:
+        // split_part ستون رو از '-' جدا می‌کنه و قسمت دوم رو به int تبدیل می‌کنه
+        Order("seats.row_name ASC, (split_part(seats.seat_number, '-', 2))::int ASC").
+        Find(&statuses).Error
 
-	if err != nil {
-		return nil, err
-	}
-	return statuses, nil
+    if err != nil {
+        return nil, err
+    }
+    return statuses, nil
 }
 
 func (p *PostgresDB) GetTicketByRef(ref string) (models.Ticket, error) {

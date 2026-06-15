@@ -17,12 +17,16 @@ type Config struct {
 	DBName     string
 	DBSSLMode  string
 
+	RedisHost     string
+	RedisPort     string
+	RedisPassword string
+	RedisDB     string
+
 	JWTSecret string
 
 	SeetLock time.Duration
 
 	CleanupInterval time.Duration
-
 }
 
 func LoadConfig(path string) *Config {
@@ -45,9 +49,14 @@ func LoadConfig(path string) *Config {
 		DBName:     viper.GetString("database.name"),
 		DBSSLMode:  viper.GetString("database.sslmode"),
 
+		RedisHost:     viper.GetString("redis.host"),
+		RedisPort:     viper.GetString("redis.port"),
+		RedisPassword: viper.GetString("redis.password"),
+		RedisDB:     viper.GetString("redis.db"),
+
 		JWTSecret: viper.GetString("jwt.secret"),
 
-		SeetLock:  viper.GetDuration("seetlock.time"),
-		CleanupInterval:  viper.GetDuration("cleanupinterval.time"),
+		SeetLock:        viper.GetDuration("seetlock.time"),
+		CleanupInterval: viper.GetDuration("cleanupinterval.time"),
 	}
 }

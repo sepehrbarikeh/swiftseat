@@ -1,16 +1,31 @@
 version: '3.8'
 
 services:
-  redis:
-    image: bitnami/redis:6.2
-    container_name: swift_seat_redis
+  db:
+    image: postgres:15-alpine
     restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: swift_seat_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:alpine
     ports:
       - "6379:6379"
-    environment:
-      - REDIS_PASSWORD=MySuperSecureRedisPassword
-    volumes:
-      - redis_data:/bitnami/redis/data
+
+  app:
+    build: .
+    restart: always
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8080:8080"
 
 volumes:
-  redis_data:
+  pgdata:

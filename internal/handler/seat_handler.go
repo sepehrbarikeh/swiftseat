@@ -121,7 +121,7 @@ func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
 // @Failure 401 {object} map[string]interface{}
 // @Router /api/user/tickets [get]
 func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
-	// استخراج آیدی کاربر از توکن JWT
+	
 	userID := c.Locals("userID").(uint)
 
 	tickets, appErr := h.svc.GetUserTickets(userID)
@@ -129,7 +129,6 @@ func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
 		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
-	// فرمت کردن دیتای خروجی برای اینکه فرانت‌آند راحت‌ترین ساختار رو داشته باشه
 	var formattedTickets []fiber.Map
 	for _, t := range tickets {
 		formattedTickets = append(formattedTickets, fiber.Map{
@@ -141,7 +140,7 @@ func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
 			"event_title": t.Event.Title,
 			"location":    t.Event.Location,
 			"event_id":    t.Event.ID,
-			"event_date":  t.Event.CreatedAt, // یا هر فیلد تاریخی که در مدل ایونت داری
+			"event_date":  t.Event.CreatedAt, 
 		})
 	}
 
@@ -168,7 +167,7 @@ func (h *SeatHandler) GetSeatMap(c *fiber.Ctx) error {
 		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
-	// صدا زدن سرویس بدون نیاز به هیچ دیتای کاربری
+
 	seatMap, appErr := h.svc.GetEventSeatMap(uint(eventID))
 	if appErr != nil {
 		return c.Status(appErr.StatusCode).JSON(appErr)

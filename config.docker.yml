@@ -1,0 +1,19 @@
+app:
+    build: .
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    # تنظیمات را مستقیم اینجا بنویس (این روش ضدِ خطا است)
+    environment:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: swift_seat_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379

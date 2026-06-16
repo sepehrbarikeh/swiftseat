@@ -23,13 +23,13 @@ func (h *Hub) Register(c chan []byte) {
 func (h *Hub) Unregister(c chan []byte) {
 	h.mu.Lock()
 	delete(h.clients, c)
-	close(c) // حتما کانال رو ببند
+	close(c) 
 	h.mu.Unlock()
 }
 
 func (h *Hub) Broadcast(msg []byte) {
 	h.mu.Lock()
-	fmt.Printf("📢 Broadcasting: %s\n", string(msg)) // این لاگ رو اضافه کن
+	fmt.Printf("📢 Broadcasting: %s\n", string(msg))
 	for c := range h.clients {
 		c <- msg
 	}

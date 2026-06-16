@@ -16,7 +16,7 @@ func (p *PostgresDB) CreateUser(user *models.User) *apperrors.AppError {
 	return nil
 }
 
-// GetUserByEmail یک کاربر را بر اساس ایمیل پیدا می‌کند
+
 func (p *PostgresDB) GetUserByEmail(email string) (*models.User, *apperrors.AppError) {
 	var user models.User
 	err := p.DB.Where("email = ?", email).First(&user).Error
@@ -30,7 +30,7 @@ func (p *PostgresDB) GetUserByEmail(email string) (*models.User, *apperrors.AppE
 }
 
 func (p *PostgresDB) UpdateUserRole(userID uint, newRole string) *apperrors.AppError {
-	// پیدا کردن یوزر و آپدیت کردن فیلد Role
+
 	result := p.DB.Model(&models.User{}).Where("id = ?", userID).Update("role", newRole)
 	if result.Error != nil {
 		return apperrors.New(http.StatusInternalServerError, "Failed to update user role", result.Error)

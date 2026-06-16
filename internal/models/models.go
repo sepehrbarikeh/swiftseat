@@ -42,7 +42,7 @@ type SeatStatus struct {
     gorm.Model
     EventID   uint       `gorm:"not null"`
     SeatID    uint       `gorm:"not null"`
-    Seat      Seat       `gorm:"foreignKey:SeatID"` // 👈 این خط باید حتماً باشه تا لود بشه
+    Seat      Seat       `gorm:"foreignKey:SeatID"` 
     Status    string     `gorm:"type:varchar(20);default:'available'"` // available, reserved, sold
     ReservedBy *uint
     ExpiresAt  *time.Time

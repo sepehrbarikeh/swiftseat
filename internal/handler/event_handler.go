@@ -110,15 +110,14 @@ func (h *EventHandler) CreateEvent(c *fiber.Ctx) error {
 func (h *EventHandler) UpdateEvent(c *fiber.Ctx) error {
 	id := c.Params("id")
 
-	// دریافت فایل (اختیاری است، پس اگر نبود خطا نگیر)
+
 	fileHeader, err := c.FormFile("image")
 	if err != nil {
 		if !strings.HasPrefix(fileHeader.Header.Get("Content-Type"), "image/") {
 			return fiber.NewError(fiber.StatusBadRequest, "Bad Request")
 		}
 	}
-	// پارس کردن فرم (استفاده از FormValue های کاربر)
-	// نکته: اگر فایل اجباری نیست، فقط اگر err == nil بود پردازش کن
+
 
 	dto := service.CreateEventDTO{
 		Title:       c.FormValue("title"),
@@ -130,8 +129,7 @@ func (h *EventHandler) UpdateEvent(c *fiber.Ctx) error {
         return c.Status(422).JSON(errs)
     }
 
-	// ... بقیه منطق پارس کردن
-	// اینجا منطق آپدیت را فراخوانی کن
+
 	appErr := h.svc.UpdateEvent(c, id, fileHeader, dto)
 	if appErr != nil {
 		return c.Status(appErr.StatusCode).JSON(appErr)
@@ -180,7 +178,7 @@ func (h *EventHandler) GetEvents(c *fiber.Ctx) error {
 	search := c.Query("search", "")
 	location := c.Query("location", "")
 
-	// فراخوانی سرویس عمومی
+
 	res, appErr := h.svc.GetPublicEvents(c.UserContext(), page, limit, search, location)
 	if appErr != nil {
 		return c.Status(appErr.StatusCode).JSON(appErr)
@@ -210,7 +208,7 @@ func (h *EventHandler) ListEvents(c *fiber.Ctx) error {
 	search := c.Query("search", "")
 	location := c.Query("location", "")
 
-	// فراخوانی سرویس ادمین
+	
 	res, appErr := h.svc.GetAdminEvents(page, limit, search, location)
 	if appErr != nil {
 		return c.Status(appErr.StatusCode).JSON(appErr)

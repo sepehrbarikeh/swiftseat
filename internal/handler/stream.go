@@ -18,7 +18,7 @@ func NewSSEHandler(hub *sse.Hub) *SSEHandler {
 	}
 }
 
-// در فایل handler (مثلاً internal/handlers/sse.go)
+
 func (h *SSEHandler) StreamEvents(c *fiber.Ctx) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -29,7 +29,7 @@ func (h *SSEHandler) StreamEvents(c *fiber.Ctx) error {
 	h.hub.Register(msgChan)
 	defer h.hub.Unregister(msgChan)
 
-	// استفاده از NotifyClose برای اینکه وقتی یوزر صفحه رو بست، دیسکانکت بشه
+
 	notify := c.Context().Done()
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {

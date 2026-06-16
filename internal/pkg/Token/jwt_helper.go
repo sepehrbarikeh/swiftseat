@@ -24,7 +24,7 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateToken یک توکن جدید با عمر ۷ روز برای کاربر می‌سازد
+
 func (t Token) GenerateToken(userID uint,role string) (string, error) {
 	claims := JWTClaims{
 		UserID: userID,
@@ -39,7 +39,7 @@ func (t Token) GenerateToken(userID uint,role string) (string, error) {
 	return token.SignedString([]byte(t.secretKey))
 }
 
-// VerifyToken توکن دریافتی را بررسی و کلمز (دیتا) داخلش را برمی‌گرداند
+
 func (t Token) VerifyToken(tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(t.secretKey), nil

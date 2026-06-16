@@ -15,7 +15,6 @@ func (p *PostgresDB) ReserveSeatWithLock(seatNumber string, eventID uint, userID
 	if err := p.DB.Transaction(func(tx *gorm.DB) error {
 		var status models.SeatStatus
 
-		// ۱. پیدا کردن اطلاعات و آیدی اصلی صندلی
 		var seat models.Seat
 		if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
 			return err
@@ -89,7 +88,7 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userI
 			return apperrors.New(http.StatusNotFound, "Seat not found", err)
 		}
 
-		// ۱. قفل کردن سطر صندلی برای جلوگیری از Race Condition
+	
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("seat_id = ? AND event_id = ?", seat.ID, eventID).
 			First(&status).Error
@@ -105,14 +104,14 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userI
 			return apperrors.New(http.StatusGone, "The reservation time limit has expired", nil)
 		}
 
-		// ۳. قطعی کردن خرید صندلی
+
 		status.Status = "sold"
 		status.ExpiresAt = nil
 		if err := tx.Save(&status).Error; err != nil {
 			return err
 		}
 
-		// ۴. ایجاد رکورد بلیت
+		
 		ticket = models.Ticket{
 			SeatID:     seat.ID,
 			EventID:    eventID,
@@ -140,7 +139,7 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userI
 	return &ticket, nil
 }
 
-// BulkCreateSeatStatuses صندلی‌های یک ایونت را به صورت گروهی وارد دیتابیس می‌کند
+
 func (p *PostgresDB) BulkCreateSeatStatuses(statuses []models.SeatStatus) *apperrors.AppError {
 	if err := p.DB.CreateInBatches(&statuses, 100).Error; err != nil {
 		return apperrors.New(http.StatusInternalServerError, "Failed to bulk create seat statuses", err)

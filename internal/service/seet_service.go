@@ -73,7 +73,7 @@ func (s *SeatService) ConfirmPayment(SeatNumber string, eventID, userID uint, am
 
 	msgData := map[string]interface{}{
 		"event_id":    eventID,
-		"seat_number": SeatNumber, // مثلاً "A-4"
+		"seat_number": SeatNumber, 
 		"new_status":  "sold",
 	}
 
@@ -104,26 +104,26 @@ func (s *SeatService) GetEventSeatMap(eventID uint) ([]SeatResponseDTO, *apperro
 	now := time.Now()
 
 	for _, st := range statuses {
-		// ۱. تعیین وضعیت پیش‌فرض
+		
 		finalStatus := st.Status
 
-		// ۲. منطقِ آزادسازیِ خودکار (Lazy Expiration)
+	
 		if st.Status == "reserved" {
 			if st.ExpiresAt != nil && st.ExpiresAt.Before(now) {
 				finalStatus = "available"
 			} else {
-				// اگر رزرو هست و هنوز منقضی نشده، صریحاً بگیم رزرو بمونه
+				
 				finalStatus = "reserved"
 			}
 		}
 
-		// ۳. اضافه کردن به لیست با وضعیتِ نهاییِ شفاف
+		
 		seatMap = append(seatMap, SeatResponseDTO{
 			SeatID:     st.SeatID,
 			SeatNumber: st.Seat.SeatNumber,
 			RowName:    st.Seat.RowName,
 			Price:      st.Seat.Price,
-			Status:     finalStatus, // اینجا مطمئنیم که مقدارِ درست ست شده
+			Status:     finalStatus, 
 		})
 	}
 

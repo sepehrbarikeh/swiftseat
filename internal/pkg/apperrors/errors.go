@@ -2,11 +2,11 @@ package apperrors
 
 import "fmt"
 
-// AppError ساختار خطای غنی برای کل سیستم
+
 type AppError struct {
-	StatusCode int    `json:"-"`       // کد HTTP مثل 400 یا 404 یا 500
-	Message    string `json:"message"` // پیغام کاربرپسند
-	RawError   error  `json:"-"`       // خطای واقعی دیتابیس یا سیستم برای لاگ داخلی
+	StatusCode int    `json:"-"`      
+	Message    string `json:"message"` 
+	RawError   error  `json:"-"`       
 }
 
 func (e *AppError) Error() string {
@@ -16,7 +16,7 @@ func (e *AppError) Error() string {
 	return e.Message
 }
 
-// New ساخت خطا با یک خطای خام دیگر
+
 func New(statusCode int, message string, rawErr error) *AppError {
 	return &AppError{
 		StatusCode: statusCode,
@@ -25,7 +25,7 @@ func New(statusCode int, message string, rawErr error) *AppError {
 	}
 }
 
-// NewValidationError برای خطاهای اعتبارسنجی ورودی‌ها (Status 400)
+
 func NewValidationError(message string) *AppError {
 	return &AppError{
 		StatusCode: 400,

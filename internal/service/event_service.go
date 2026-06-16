@@ -21,7 +21,7 @@ import (
 type EventService struct {
 	repo  *repository.PostgresDB
 	redis *database.RedisClient
-	wg    *sync.WaitGroup // 👈 تزریق پوینتر WaitGroup برای مدیریت فرآیندهای پس‌زمینه
+	wg    *sync.WaitGroup 
 }
 
 type EventResponse struct {
@@ -31,10 +31,10 @@ type EventResponse struct {
 }
 
 type UpdateEventRequest struct {
-	Title       string                `form:"title"` // فقط اطلاعاتی که کاربر مجاز است ویرایش کند
+	Title       string                `form:"title"` 
 	Description string                `form:"description"`
 	Location    string                `form:"location"`
-	Image       *multipart.FileHeader `form:"image"` // فایلی که می‌خواهیم آپلود کنیم
+	Image       *multipart.FileHeader `form:"image"` 
 }
 
 func NewEventService(repo *repository.PostgresDB, wg *sync.WaitGroup, redis *database.RedisClient) *EventService {
@@ -87,10 +87,10 @@ func (s *EventService) CreateNewEvent(c *fiber.Ctx, fileHeader *multipart.FileHe
 			return
 		}
 
-		// seats is ready
+		
 		_ = s.repo.UpdateEventStatus(id, "active")
 
-		// ۲. 🚀 باطل کردن کش: چون یک ایونت اکتیو جدید داریم، کش قبلی ردیس را پاک می‌کنیم
+		
 		if err := s.redis.DeleteCache(ctx, "events:active"); err != nil {
 			log.Printf("[WARN] Failed to invalidate Redis cache after event activation: %v", err)
 		}
@@ -111,7 +111,7 @@ func (s *EventService) UpdateEvent(c *fiber.Ctx, id string, fileHeader *multipar
 		return appErr
 	}
 
-	// ۲. آپدیت کردن فیلدها
+
 	oldEvent.Title = dto.Title
 	oldEvent.Description = dto.Description
 	oldEvent.Location = dto.Location

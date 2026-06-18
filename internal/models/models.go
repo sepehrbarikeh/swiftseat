@@ -59,8 +59,49 @@ type Ticket struct {
     Event      Event `gorm:"foreignKey:EventID" json:"event"` 
 
     UserID     uint           `gorm:"not null" json:"user_id"`
-    TicketRef  string         `gorm:"type:varchar(100);unique;not null" json:"ticket_ref"`
+    TicketRef  string         `gorm:"type:varchar(100);not null" json:"ticket_ref"`
     PaidAmount int64          `json:"paid_amount"`
     CreatedAt  time.Time      `json:"created_at"`
     DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+type Reservation struct {
+	ID        uint              `gorm:"primaryKey"`
+
+	Ref       string            `gorm:"not null"`
+
+	UserID    uint              `gorm:"index;not null"`
+	EventID   uint              `gorm:"index:idx_user_event;not null"`
+
+	Status    ReservationStatus `gorm:"type:varchar(20);index" json:"status"`
+
+	TotalAmount int64           `gorm:"not null"`
+
+	ExpiresAt *time.Time        `gorm:"index"`
+
+	Version   int               `gorm:"default:1"`
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
+
+	DeletedAt gorm.DeletedAt    `gorm:"index"`
+}
+
+type ReservationStatus string
+
+const (
+	ReservationPending   ReservationStatus = "pending"
+	ReservationReserved  ReservationStatus = "reserved"
+	ReservationPaid      ReservationStatus = "paid"
+	ReservationExpired   ReservationStatus = "expired"
+	ReservationCancelled ReservationStatus = "cancelled"
+)
+
+type ReservationSeat struct {
+	ID            uint `gorm:"primaryKey"`
+
+	ReservationID uint `gorm:"index;not null"`
+	SeatID        uint `gorm:"index;not null"`
+
+	CreatedAt time.Time
 }

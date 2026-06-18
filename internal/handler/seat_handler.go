@@ -18,16 +18,15 @@ func NewSeatHandler(svc *service.SeatService) *SeatHandler {
 	return &SeatHandler{svc: svc}
 }
 
-
 type ReserveSeatRequest struct {
-    SeatNumber string `json:"seat_number" validate:"required"`
-    EventID    uint   `json:"event_id" validate:"required,gt=0"`
+	SeatNumber []string `json:"seat_number" validate:"required"`
+	EventID    uint     `json:"event_id" validate:"required,gt=0"`
 }
 
 type ConfirmPaymentRequest struct {
-    SeatNumber string `json:"seat_number" validate:"required"`
-    EventID    uint   `json:"event_id" validate:"required,gt=0"`
-    Amount     int64  `json:"amount" validate:"required,gt=0"`
+	TicketRef string `json:"ticket_ref" validate:"required"`
+	EventID   uint   `json:"event_id" validate:"required,gt=0"`
+	Amount    int64  `json:"amount" validate:"required,gt=0"`
 }
 
 // @Summary Reserve a seat
@@ -50,18 +49,19 @@ func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
 	}
 
 	if errs := utils.ValidateStruct(req); errs != nil {
-        return c.Status(422).JSON(errs)
-    }
+		return c.Status(422).JSON(errs)
+	}
 
 	userID := c.Locals("user_id").(uint)
 
-	appErr := h.svc.HoldSeat(req.SeatNumber, req.EventID, userID)
+	ref, appErr := h.svc.HoldSeat(req.SeatNumber, req.EventID, userID)
 	if appErr != nil {
 		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{
-		"message": "Seat successfully reserved for 10 minutes",
+		"message":    "Seat successfully reserved for 10 minutes",
+		"ticket_ref": ref,
 	})
 }
 
@@ -79,18 +79,18 @@ func (h *SeatHandler) Reserve(c *fiber.Ctx) error {
 func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
 	var req ConfirmPaymentRequest
 	if err := c.BodyParser(&req); err != nil {
-		fmt.Println(req)
+		fmt.Println(err)
 		appErr := apperrors.NewValidationError("Invalid request body")
 		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
 
 	if errs := utils.ValidateStruct(req); errs != nil {
-        return c.Status(422).JSON(errs)
-    }
+		return c.Status(422).JSON(errs)
+	}
 
 	userID := c.Locals("user_id").(uint)
 
-	ticket, appErr := h.svc.ConfirmPayment(req.SeatNumber, req.EventID, userID, req.Amount)
+	ticket, appErr := h.svc.ConfirmPayment(req.TicketRef, req.EventID, userID, req.Amount)
 	if appErr != nil {
 		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
@@ -121,7 +121,7 @@ func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
 // @Failure 401 {object} map[string]interface{}
 // @Router /api/user/tickets [get]
 func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
-	
+
 	userID := c.Locals("userID").(uint)
 
 	tickets, appErr := h.svc.GetUserTickets(userID)
@@ -140,7 +140,7 @@ func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
 			"event_title": t.Event.Title,
 			"location":    t.Event.Location,
 			"event_id":    t.Event.ID,
-			"event_date":  t.Event.CreatedAt, 
+			"event_date":  t.Event.CreatedAt,
 		})
 	}
 
@@ -166,7 +166,6 @@ func (h *SeatHandler) GetSeatMap(c *fiber.Ctx) error {
 		appErr := apperrors.NewValidationError("Invalid event id")
 		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
-
 
 	seatMap, appErr := h.svc.GetEventSeatMap(uint(eventID))
 	if appErr != nil {

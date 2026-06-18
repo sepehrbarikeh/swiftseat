@@ -59,6 +59,9 @@ func main() {
 	cronWorker := worker.NewCleanupWorker(db,cfg.CleanupInterval)
 	cronWorker.Start()
 
+	cronjob:= worker.NewCronjobWorker(db)
+	cronjob.StartWorkers()
+
 	// user service
 	userSvc := service.NewUserService(db, token)
 	userHandler := handlers.NewUserHandler(userSvc)

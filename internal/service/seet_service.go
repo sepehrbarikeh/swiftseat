@@ -6,7 +6,6 @@ import (
 
 	"swift-seat/internal/models"
 	"swift-seat/internal/pkg/apperrors"
-	"swift-seat/internal/pkg/ticket"
 	"swift-seat/internal/repository"
 	"swift-seat/internal/sse"
 )
@@ -25,14 +24,6 @@ type SeatResponseDTO struct {
 	Status     string  `json:"status"`
 }
 
-type PaginatedEventsResponse struct {
-	TotalItems  int64          `json:"total_items"`
-	TotalPages  int            `json:"total_pages"`
-	CurrentPage int            `json:"current_page"`
-	Limit       int            `json:"limit"`
-	Events      []models.Event `json:"events"`
-}
-
 func NewSeatService(repo *repository.PostgresDB, seatLockDuration time.Duration, hub *sse.Hub) *SeatService {
 	return &SeatService{repo: repo,
 		seatLockDuration: seatLockDuration,
@@ -40,40 +31,36 @@ func NewSeatService(repo *repository.PostgresDB, seatLockDuration time.Duration,
 	}
 }
 
-func (s *SeatService) HoldSeat(SeatNumber string, eventID uint, userID uint) *apperrors.AppError {
+func (s *SeatService) HoldSeat(SeatNumber []string, eventID uint, userID uint) (string,*apperrors.AppError) {
 
 	lockDuration := s.seatLockDuration
 
-	if appErr := s.repo.ReserveSeatWithLock(SeatNumber, eventID, userID, lockDuration); appErr != nil {
-		return appErr
+	reserv, appErr := s.repo.CreateReservation(SeatNumber, eventID, userID, lockDuration);
+	if appErr != nil {
+		return "",appErr
 	}
 
-	msgData := map[string]interface{}{
-		"event_id":    eventID,
-		"seat_number": SeatNumber,
-		"new_status":  "reserved",
-	}
+	
 
-	msgBytes, err := json.Marshal(msgData)
+	msgBytes, err := json.Marshal(reserv)
 	if err == nil {
 		s.hub.Broadcast(msgBytes)
 	}
 
-	return nil
+	return reserv.Ref, nil
 }
 
-func (s *SeatService) ConfirmPayment(SeatNumber string, eventID, userID uint, amount int64) (*models.Ticket, *apperrors.AppError) {
+func (s *SeatService) ConfirmPayment(TicketRef string, eventID, userID uint, amount int64) (*models.Ticket, *apperrors.AppError) {
 
-	ticketRef := ticket.GenerateTicketRef()
 
-	ticket, appErr := s.repo.ExecutePaymentTransaction(SeatNumber, eventID, userID, amount, ticketRef)
+	ticket, appErr := s.repo.ExecutePaymentTransaction(TicketRef, userID, amount)
 	if appErr != nil {
 		return nil, appErr
 	}
 
 	msgData := map[string]interface{}{
 		"event_id":    eventID,
-		"seat_number": SeatNumber, 
+		"seat_number": ticket.SeatID, 
 		"new_status":  "sold",
 	}
 

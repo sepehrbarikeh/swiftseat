@@ -21,7 +21,7 @@ import (
 type EventService struct {
 	repo  *repository.PostgresDB
 	redis *database.RedisClient
-	wg    *sync.WaitGroup 
+	wg    *sync.WaitGroup
 }
 
 type EventResponse struct {
@@ -30,11 +30,24 @@ type EventResponse struct {
 	IsSoldOut      bool  `json:"is_sold_out"`
 }
 
+type EventDTO struct {
+	models.Event
+	AvailableSeats int64 `json:"available_seats"`
+}
+
+type PaginatedEventsResponse struct {
+	TotalItems  int64      `json:"total_items"`
+	TotalPages  int        `json:"total_pages"`
+	CurrentPage int        `json:"current_page"`
+	Limit       int        `json:"limit"`
+	Events      []EventDTO `json:"events"` // استفاده از DTO
+}
+
 type UpdateEventRequest struct {
-	Title       string                `form:"title"` 
+	Title       string                `form:"title"`
 	Description string                `form:"description"`
 	Location    string                `form:"location"`
-	Image       *multipart.FileHeader `form:"image"` 
+	Image       *multipart.FileHeader `form:"image"`
 }
 
 func NewEventService(repo *repository.PostgresDB, wg *sync.WaitGroup, redis *database.RedisClient) *EventService {
@@ -87,10 +100,8 @@ func (s *EventService) CreateNewEvent(c *fiber.Ctx, fileHeader *multipart.FileHe
 			return
 		}
 
-		
 		_ = s.repo.UpdateEventStatus(id, "active")
 
-		
 		if err := s.redis.DeleteCache(ctx, "events:active"); err != nil {
 			log.Printf("[WARN] Failed to invalidate Redis cache after event activation: %v", err)
 		}
@@ -105,21 +116,19 @@ func (s *EventService) CreateNewEvent(c *fiber.Ctx, fileHeader *multipart.FileHe
 
 func (s *EventService) UpdateEvent(c *fiber.Ctx, id string, fileHeader *multipart.FileHeader, dto CreateEventDTO) *apperrors.AppError {
 	ctx := context.Background()
-	
+
 	oldEvent, appErr := s.repo.FindByID(id)
 	if appErr != nil {
 		return appErr
 	}
-
 
 	oldEvent.Title = dto.Title
 	oldEvent.Description = dto.Description
 	oldEvent.Location = dto.Location
 	oldEvent.StartTime = dto.StartTime
 
-	
 	if fileHeader != nil {
-		
+
 		_ = os.Remove(oldEvent.ImageURL)
 
 		if err := c.SaveFile(fileHeader, dto.ImageUrl); err != nil {
@@ -128,7 +137,6 @@ func (s *EventService) UpdateEvent(c *fiber.Ctx, id string, fileHeader *multipar
 		oldEvent.ImageURL = dto.ImageUrl
 	}
 
-	
 	if appErr := s.repo.UpdateEvent(oldEvent); appErr != nil {
 		return appErr
 	}
@@ -173,13 +181,34 @@ func (s *EventService) GetPublicEvents(ctx context.Context, page, limit int, sea
 		return nil, appErr
 	}
 
+	// واکشی تعداد صندلی‌ها
+	eventIDs := make([]uint, len(events))
+	for i, e := range events {
+		eventIDs[i] = e.ID
+	}
+	counts, _ := s.repo.GetAvailableSeatCounts(eventIDs)
+
+	// ترکیب داده‌ها در DTO
+	eventDTOs := make([]EventDTO, len(events))
+	for i, e := range events {
+		eventDTOs[i] = EventDTO{
+			Event:          e,
+			AvailableSeats: counts[e.ID],
+		}
+	}
+
+	response = PaginatedEventsResponse{
+
+		Events: eventDTOs,
+	}
+
 	totalPages := int((totalItems + int64(limit) - 1) / int64(limit))
 	response = PaginatedEventsResponse{
 		TotalItems:  totalItems,
 		TotalPages:  totalPages,
 		CurrentPage: page,
 		Limit:       limit,
-		Events:      events,
+		Events:      eventDTOs,
 	}
 
 	_ = s.redis.SetCache(ctx, cacheKey, response, 10*time.Minute)
@@ -188,10 +217,24 @@ func (s *EventService) GetPublicEvents(ctx context.Context, page, limit int, sea
 
 // (Protected)
 func (s *EventService) GetAdminEvents(page, limit int, search, location string) (*PaginatedEventsResponse, *apperrors.AppError) {
-	
+
 	events, totalItems, appErr := s.repo.GetEventsPaginated(page, limit, search, location, "")
 	if appErr != nil {
 		return nil, appErr
+	}
+
+	eventIDs := make([]uint, len(events))
+	for i, e := range events {
+		eventIDs[i] = e.ID
+	}
+	counts, _ := s.repo.GetAvailableSeatCounts(eventIDs)
+
+	eventDTOs := make([]EventDTO, len(events))
+	for i, e := range events {
+		eventDTOs[i] = EventDTO{
+			Event:          e,
+			AvailableSeats: counts[e.ID],
+		}
 	}
 
 	totalPages := int((totalItems + int64(limit) - 1) / int64(limit))
@@ -200,14 +243,12 @@ func (s *EventService) GetAdminEvents(page, limit int, search, location string) 
 		TotalPages:  totalPages,
 		CurrentPage: page,
 		Limit:       limit,
-		Events:      events,
+		Events:      eventDTOs,
 	}, nil
 }
 
-
-
 func (s *EventService) GetHomeEvents() (map[string][]EventResponse, *apperrors.AppError) {
-	
+
 	popular, appErr := s.repo.GetPopularEvents(4)
 	if appErr != nil {
 		return nil, appErr
@@ -217,7 +258,6 @@ func (s *EventService) GetHomeEvents() (map[string][]EventResponse, *apperrors.A
 		return nil, appErr
 	}
 
-	
 	getWithSeats := func(events []models.Event) []EventResponse {
 		var ids []uint
 		for _, e := range events {

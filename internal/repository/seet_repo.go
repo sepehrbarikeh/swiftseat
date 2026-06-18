@@ -6,121 +6,172 @@ import (
 
 	"swift-seat/internal/models"
 	"swift-seat/internal/pkg/apperrors"
-
+	"swift-seat/internal/pkg/ticket"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-func (p *PostgresDB) ReserveSeatWithLock(seatNumber string, eventID uint, userID uint, duration time.Duration) *apperrors.AppError {
-	if err := p.DB.Transaction(func(tx *gorm.DB) error {
-		var status models.SeatStatus
+func (p *PostgresDB) CreateReservation(seatNumbers []string, eventID uint, userID uint, duration time.Duration) (*models.Reservation, *apperrors.AppError) {
+    var reservation models.Reservation
+    ticketRef := ticket.GenerateTicketRef()
 
-		var seat models.Seat
-		if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
-			return err
-		}
+    err := p.DB.Transaction(func(tx *gorm.DB) error {
+        expiresAt := time.Now().Add(duration)
 
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("seat_id = ? AND event_id = ?", seat.ID, eventID).
-			First(&status).Error
+        // 1. ایجاد رزرو
+        reservation = models.Reservation{
+            Ref:         ticketRef,
+            UserID:      userID,
+            EventID:     eventID,
+            Status:      models.ReservationReserved,
+            ExpiresAt:   &expiresAt,
+            TotalAmount: 0,
+        }
 
-		if err != nil {
-			return err
-		}
+        if err := tx.Create(&reservation).Error; err != nil {
+            return err
+        }
 
-		now := time.Now()
-		if status.Status == "sold" {
-			return apperrors.New(http.StatusConflict, "This seat has already been sold", nil)
-		}
-		if status.Status == "reserved" && status.ExpiresAt != nil && status.ExpiresAt.After(now) {
-			return apperrors.New(http.StatusConflict, "This seat is already reserved by another user", nil)
-		}
+        // 2. قفل کردن صندلی‌ها جهت بررسی وضعیت
+        var seats []models.Seat
+        if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+            Where("event_id = ? AND seat_number IN ?", eventID, seatNumbers).
+            Find(&seats).Error; err != nil {
+            return err
+        }
 
-		// reserve and lock for new user
-		expiration := now.Add(duration)
-		status.Status = "reserved"
-		status.ReservedBy = &userID
-		status.ExpiresAt = &expiration
+        if len(seats) != len(seatNumbers) {
+            return apperrors.New(http.StatusNotFound, "برخی صندلی‌ها یافت نشدند", nil)
+        }
 
-		if err := tx.Save(&status).Error; err != nil {
-			return err
-		}
+        // 3. ایجاد رکوردهای ReservationSeat
+        var rs []models.ReservationSeat
+        for _, seat := range seats {
+            rs = append(rs, models.ReservationSeat{
+                ReservationID: reservation.ID,
+                SeatID:        seat.ID,
+            })
+        }
+        if err := tx.Create(&rs).Error; err != nil {
+            return err
+        }
 
-		return nil
-	}); err != nil {
-		// if err already an AppError, return it
-		if ae, ok := err.(*apperrors.AppError); ok {
-			return ae
-		}
-		return apperrors.New(http.StatusInternalServerError, "Failed to reserve seat", err)
-	}
-	return nil
+        // 4. دریافت و آپدیت وضعیت صندلی‌ها
+        seatIDs := make([]uint, len(seats))
+        for i, s := range seats {
+            seatIDs[i] = s.ID
+        }
+
+        var statuses []models.SeatStatus
+        if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+            Where("seat_id IN ? AND event_id = ?", seatIDs, eventID).
+            Find(&statuses).Error; err != nil {
+            return err
+        }
+
+        for _, st := range statuses {
+            // اعتبارسنجی وضعیت
+            if st.Status == "sold" {
+                return apperrors.New(http.StatusConflict, "صندلی فروخته شده است", nil)
+            }
+            if st.Status == "reserved" && st.ExpiresAt != nil && st.ExpiresAt.After(time.Now()) {
+                return apperrors.New(http.StatusConflict, "صندلی قبلاً رزرو شده است", nil)
+            }
+
+            // آپدیت تکی هر صندلی (جایگزین Bulk Save برای رفع خطای 42P10)
+            err := tx.Model(&st).Updates(map[string]interface{}{
+                "status":      "reserved",
+                "reserved_by": userID,
+                "expires_at":  reservation.ExpiresAt,
+            }).Error
+
+            if err != nil {
+                return err
+            }
+        }
+
+        return nil
+    })
+
+    if err != nil {
+        if ae, ok := err.(*apperrors.AppError); ok {
+            return nil, ae
+        }
+        return nil, apperrors.New(http.StatusInternalServerError, "خطا در انجام رزرو", err)
+    }
+
+    return &reservation, nil
 }
 
-// CleanupExpiredSeats
-func (p *PostgresDB) CleanupExpiredSeats() (int64, *apperrors.AppError) {
-	now := time.Now()
+func (p *PostgresDB) ExecutePaymentTransaction(reservationRef string,userID uint,amount int64,) (*models.Ticket, *apperrors.AppError) {
 
-	result := p.DB.Model(&models.SeatStatus{}).
-		Where("status = ? AND expires_at < ?", "reserved", now).
-		Updates(map[string]interface{}{
-			"status":      "available",
-			"reserved_by": nil,
-			"expires_at":  nil,
-		})
-
-	if result.Error != nil {
-		return 0, apperrors.New(http.StatusInternalServerError, "Failed to cleanup expired seats", result.Error)
-	}
-
-	return result.RowsAffected, nil
-
-}
-
-func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userID uint, amount int64, ticketRef string) (*models.Ticket, *apperrors.AppError) {
-	var ticket models.Ticket
+	var lastTicket models.Ticket
 
 	err := p.DB.Transaction(func(tx *gorm.DB) error {
-		var status models.SeatStatus
 
-		var seat models.Seat
-		if err := tx.Where("event_id = ? AND seat_number = ?", eventID, seatNumber).First(&seat).Error; err != nil {
-			return apperrors.New(http.StatusNotFound, "Seat not found", err)
+		now := time.Now()
+
+		// 1. get reservation
+		var reservation models.Reservation
+
+		if err := tx.
+			Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("ref = ?", reservationRef).
+			First(&reservation).Error; err != nil {
+
+			return apperrors.New(http.StatusNotFound, "Reservation not found", err)
 		}
 
-	
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("seat_id = ? AND event_id = ?", seat.ID, eventID).
-			First(&status).Error
-		if err != nil {
-			return apperrors.New(http.StatusNotFound, "Seat not found", err)
+		// 2. validate
+		if reservation.UserID != userID {
+			return apperrors.New(http.StatusForbidden, "Invalid user", nil)
 		}
 
-		// ۲. اعتبارسنجی وضعیت رزرو صندلی
-		if status.Status != "reserved" || status.ReservedBy == nil || *status.ReservedBy != userID {
-			return apperrors.New(http.StatusBadRequest, "This seat is not reserved by you or has already been sold", nil)
-		}
-		if status.ExpiresAt != nil && status.ExpiresAt.Before(time.Now()) {
-			return apperrors.New(http.StatusGone, "The reservation time limit has expired", nil)
+		if reservation.ExpiresAt.Before(now) {
+			return apperrors.New(http.StatusGone, "Expired", nil)
 		}
 
+		if reservation.Status == "paid" {
+			return apperrors.New(http.StatusConflict, "Already paid", nil)
+		}
 
-		status.Status = "sold"
-		status.ExpiresAt = nil
-		if err := tx.Save(&status).Error; err != nil {
+		// 3. mark paid
+		reservation.Status = "paid"
+
+		if err := tx.Save(&reservation).Error; err != nil {
 			return err
 		}
 
-		
-		ticket = models.Ticket{
-			SeatID:     seat.ID,
-			EventID:    eventID,
-			UserID:     userID,
-			TicketRef:  ticketRef,
-			PaidAmount: amount,
-		}
-		if err := tx.Create(&ticket).Error; err != nil {
+		// 4. get seats
+		var seats []models.Seat
+
+		if err := tx.
+			Table("seats").
+			Joins("JOIN reservation_seats rs ON rs.seat_id = seats.id").
+			Where("rs.reservation_id = ?", reservation.ID).
+			Find(&seats).Error; err != nil {
+
 			return err
+		}
+
+		// 5. create tickets
+		tickets := make([]models.Ticket, 0, len(seats))
+
+		for _, seat := range seats {
+			tickets = append(tickets, models.Ticket{
+				SeatID:     seat.ID,
+				EventID:    reservation.EventID,
+				UserID:     userID,
+				TicketRef:  reservation.Ref,
+				PaidAmount: amount,
+			})
+		}
+
+		if len(tickets) > 0 {
+			if err := tx.Create(&tickets).Error; err != nil {
+				return err
+			}
+			lastTicket = tickets[len(tickets)-1]
 		}
 
 		return nil
@@ -130,15 +181,40 @@ func (p *PostgresDB) ExecutePaymentTransaction(seatNumber string, eventID, userI
 		if ae, ok := err.(*apperrors.AppError); ok {
 			return nil, ae
 		}
-		return nil, apperrors.New(http.StatusInternalServerError, "Payment transaction failed", err)
+
+		return nil, apperrors.New(http.StatusInternalServerError, "Payment failed", err)
 	}
 
-	if err := p.DB.Preload("Event").Preload("Seat").First(&ticket, ticket.ID).Error; err != nil {
-		return nil, apperrors.New(http.StatusInternalServerError, "Failed to load ticket", err)
-	}
-	return &ticket, nil
+	return &lastTicket, nil
 }
 
+// CleanupExpiredSeats
+func (p *PostgresDB) CleanupExpiredSeats() (int64, *apperrors.AppError) {
+
+	now := time.Now()
+
+	result := p.DB.Model(&models.SeatStatus{}).
+		Where(`
+			status = ? 
+			AND expires_at IS NOT NULL 
+			AND expires_at < ?
+		`, "reserved", now).
+		Updates(map[string]interface{}{
+			"status":      "available",
+			"reserved_by": nil,
+			"expires_at":  nil,
+		})
+
+	if result.Error != nil {
+		return 0, apperrors.New(
+			http.StatusInternalServerError,
+			"Failed to cleanup expired seats",
+			result.Error,
+		)
+	}
+
+	return result.RowsAffected, nil
+}
 
 func (p *PostgresDB) BulkCreateSeatStatuses(statuses []models.SeatStatus) *apperrors.AppError {
 	if err := p.DB.CreateInBatches(&statuses, 100).Error; err != nil {

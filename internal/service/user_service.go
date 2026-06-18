@@ -44,22 +44,22 @@ func (s *UserService) Register(name, email, password string) *apperrors.AppError
 	return nil
 }
 
-func (s *UserService) Login(email, password string) (string, *apperrors.AppError) {
+func (s *UserService) Login(email, password string) (string,string, *apperrors.AppError) {
 	user, appErr := s.repo.GetUserByEmail(email)
 	if appErr != nil {
-		return "", appErr
+		return "","", appErr
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return "", apperrors.New(http.StatusUnauthorized, "Invalid credentials", err)
+		return "","", apperrors.New(http.StatusUnauthorized, "Invalid credentials", err)
 	}
 
 	tok, err := s.token.GenerateToken(user.ID, user.Role)
 	if err != nil {
-		return "", apperrors.New(http.StatusInternalServerError, "Failed to generate token", err)
+		return "","", apperrors.New(http.StatusInternalServerError, "Failed to generate token", err)
 	}
 
-	return tok, nil
+	return tok,user.Role, nil
 }
 
 func (s *UserService) UpdateUserRole(userID uint, newRole string) *apperrors.AppError {

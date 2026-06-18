@@ -186,3 +186,16 @@ func (p *PostgresDB) GetUpcomingEvents(limit int) ([]models.Event, *apperrors.Ap
 	}
 	return events, nil
 }
+
+
+
+func (p *PostgresDB) DeactivateExpiredEvents() (int64, error) {
+    now := time.Now()
+    
+
+    result := p.DB.Model(&models.Event{}).
+        Where("start_time < ? AND status = ?", now, "active").
+        Update("status", "finished") 
+
+    return result.RowsAffected, result.Error
+}

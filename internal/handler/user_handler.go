@@ -87,7 +87,7 @@ func (h *UserHandler) Login(c *fiber.Ctx) error {
         return c.Status(422).JSON(errs)
     }
 
-	token, appErr := h.svc.Login(req.Email, req.Password)
+	token,role, appErr := h.svc.Login(req.Email, req.Password)
 	if appErr != nil {
 		return c.Status(appErr.StatusCode).JSON(appErr)
 	}
@@ -96,6 +96,7 @@ func (h *UserHandler) Login(c *fiber.Ctx) error {
 		"status": "success",
 		"token":  token,
 		"type":   "Bearer",
+		"role" : role,
 	})
 }
 

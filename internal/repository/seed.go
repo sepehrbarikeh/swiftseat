@@ -15,7 +15,7 @@ func (p *PostgresDB) SeedAdmin() {
 	}
 
 	
-	password := "Admin@123"
+	password := "adminadmin"
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Fatal("Failed to hash password")
@@ -25,7 +25,7 @@ func (p *PostgresDB) SeedAdmin() {
 	admin := map[string]interface{}{
 		"name":          "Admin",
 		"email":         "admin@swiftseat.com",
-		"password":      string(hashedPassword),
+		"password_hash":      string(hashedPassword),
 		"role":          "admin",
 	}
 

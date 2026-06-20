@@ -15,14 +15,12 @@ type SeatCountResult struct {
 	Count   int64
 }
 
-
 func (p *PostgresDB) CreateEvent(event *models.Event) *apperrors.AppError {
 	if err := p.DB.Create(event).Error; err != nil {
 		return apperrors.New(http.StatusInternalServerError, "Failed to create event", err)
 	}
 	return nil
 }
-
 
 func (p *PostgresDB) CreateSeatsForEvent(eventID uint, rows int, seatsPerRow int) *apperrors.AppError {
 	if err := p.DB.Transaction(func(tx *gorm.DB) error {
@@ -31,7 +29,7 @@ func (p *PostgresDB) CreateSeatsForEvent(eventID uint, rows int, seatsPerRow int
 			rowName := string(rune('A' + r))
 			for s := 1; s <= seatsPerRow; s++ {
 				seats = append(seats, models.Seat{
-					EventID:    eventID, 
+					EventID:    eventID,
 					SeatNumber: fmt.Sprintf("%s-%d", rowName, s),
 					RowName:    rowName,
 					Price:      500000.0,
@@ -79,7 +77,7 @@ func (p *PostgresDB) UpdateEventStatus(eventID uint, status string) *apperrors.A
 func (p *PostgresDB) FindByID(id string) (models.Event, *apperrors.AppError) {
 	var event models.Event
 
-	err := p.DB.Where("id = ?", id).First(&event, id).Error
+	err := p.DB.First(&event, "id = ?", id).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return models.Event{}, apperrors.New(http.StatusNotFound, "Event not found", err)
@@ -90,7 +88,9 @@ func (p *PostgresDB) FindByID(id string) (models.Event, *apperrors.AppError) {
 }
 
 func (p *PostgresDB) UpdateEvent(event models.Event) *apperrors.AppError {
-	if err := p.DB.Save(event).Error; err != nil {
+	if err := p.DB.Model(&models.Event{}).
+		Where("id = ?", event.ID).
+		Updates(event).Error; err != nil {
 		return apperrors.New(http.StatusInternalServerError, "Failed to update event", err)
 	}
 	return nil
@@ -104,15 +104,13 @@ func (p *PostgresDB) DeleteEvent(id string) *apperrors.AppError {
 }
 
 func (p *PostgresDB) GetEventsPaginated(page, limit int, search, location string, statusFilter string) ([]models.Event, int64, *apperrors.AppError) {
-	
+
 	query := p.DB.Model(&models.Event{})
 
-	
 	if statusFilter != "" {
 		query = query.Where("status = ?", statusFilter)
 	}
 
-	
 	if search != "" {
 		searchPattern := "%" + search + "%"
 		query = query.Where("title LIKE ? OR description LIKE ?", searchPattern, searchPattern)
@@ -123,12 +121,10 @@ func (p *PostgresDB) GetEventsPaginated(page, limit int, search, location string
 		query = query.Where("location = ?", location)
 	}
 
-	
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, apperrors.New(http.StatusInternalServerError, "Failed to count events", err)
 	}
-
 
 	var events []models.Event
 	offset := (page - 1) * limit
@@ -142,7 +138,6 @@ func (p *PostgresDB) GetEventsPaginated(page, limit int, search, location string
 func (p *PostgresDB) GetAvailableSeatCounts(eventIDs []uint) (map[uint]int64, *apperrors.AppError) {
 	var results []SeatCountResult
 
-	
 	if err := p.DB.Model(&models.SeatStatus{}).
 		Select("event_id, count(*) as count").
 		Where("event_id IN ? AND status = ?", eventIDs, "available").
@@ -151,7 +146,6 @@ func (p *PostgresDB) GetAvailableSeatCounts(eventIDs []uint) (map[uint]int64, *a
 		return nil, apperrors.New(http.StatusInternalServerError, "Failed to get available seat counts", err)
 	}
 
-
 	counts := make(map[uint]int64)
 	for _, res := range results {
 		counts[res.EventID] = res.Count
@@ -159,12 +153,11 @@ func (p *PostgresDB) GetAvailableSeatCounts(eventIDs []uint) (map[uint]int64, *a
 	return counts, nil
 }
 
-
 func (p *PostgresDB) GetPopularEvents(limit int) ([]models.Event, *apperrors.AppError) {
 	var events []models.Event
 	if err := p.DB.Model(&models.Event{}).
 		Joins("JOIN seat_statuses ON seat_statuses.event_id = events.id").
-		Where("seat_statuses.status = ?", "booked").
+		Where("seat_statuses.status = ?", "sold").
 		Group("events.id").
 		Order("count(seat_statuses.id) DESC").
 		Limit(limit).
@@ -174,10 +167,9 @@ func (p *PostgresDB) GetPopularEvents(limit int) ([]models.Event, *apperrors.App
 	return events, nil
 }
 
-
 func (p *PostgresDB) GetUpcomingEvents(limit int) ([]models.Event, *apperrors.AppError) {
 	var events []models.Event
-	
+
 	if err := p.DB.Where("status = ? AND start_time > ?", "active", time.Now()).
 		Order("start_time ASC").
 		Limit(limit).
@@ -187,15 +179,12 @@ func (p *PostgresDB) GetUpcomingEvents(limit int) ([]models.Event, *apperrors.Ap
 	return events, nil
 }
 
-
-
 func (p *PostgresDB) DeactivateExpiredEvents() (int64, error) {
-    now := time.Now()
-    
+	now := time.Now()
 
-    result := p.DB.Model(&models.Event{}).
-        Where("start_time < ? AND status = ?", now, "active").
-        Update("status", "finished") 
+	result := p.DB.Model(&models.Event{}).
+		Where("start_time < ? AND status = ?", now, "active").
+		Update("status", "finished")
 
-    return result.RowsAffected, result.Error
+	return result.RowsAffected, result.Error
 }

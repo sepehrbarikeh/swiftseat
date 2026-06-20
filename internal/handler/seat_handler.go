@@ -122,7 +122,7 @@ func (h *SeatHandler) ConfirmPayment(c *fiber.Ctx) error {
 // @Router /api/user/tickets [get]
 func (h *SeatHandler) GetMyTickets(c *fiber.Ctx) error {
 
-	userID := c.Locals("userID").(uint)
+	userID := c.Locals("user_id").(uint)
 
 	tickets, appErr := h.svc.GetUserTickets(userID)
 	if appErr != nil {

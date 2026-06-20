@@ -11,6 +11,21 @@ import (
 	fiberSwagger "github.com/swaggo/fiber-swagger"
 )
 
+
+// @Summary Health check
+// @Description Returns service health status
+// @Tags Diagnostics
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /health [get]
+func HealthCheck(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"status": "ok",
+	})
+}
+
+
 func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandler *handlers.SeatHandler, userHandler handlers.UserHandler, sseHandler *handlers.SSEHandler, middleware *middleware.AuthMiddleware) {
 
 	seatLimiter := limiter.New(limiter.Config{
@@ -31,15 +46,17 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 		},
 	})
 
+	app.Static("/uploads", "./uploads")
 	// Swagger UI
 	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
 	app.Get("/health", HealthCheck)
-
+	app.Get("/api/events/stream", sseHandler.StreamEvents)
 	api := app.Group("/api")
 	api.Get("/", eventHandler.GetHomeData)
+	api.Get("/tickets/validate/:ref", seatHandler.ValidateTicket)
 	
-	app.Get("/api/events/stream", sseHandler.StreamEvents)
+
 
 	api.Get("/events/:event_id/seats", seatHandler.GetSeatMap)
 
@@ -64,19 +81,6 @@ func SetupRoutes(app *fiber.App, eventHandler *handlers.EventHandler, seatHandle
 
 	admin.Put("/events/:id", eventHandler.UpdateEvent)
 	admin.Delete("/events/:id", eventHandler.DeleteEvent)
-	admin.Get("/tickets/validate/:ref", seatHandler.ValidateTicket)
-	admin.Get("/events/all", eventHandler.ListEvents)
-}
 
-// @Summary Health check
-// @Description Returns service health status
-// @Tags Diagnostics
-// @Accept json
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Router /health [get]
-func HealthCheck(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{
-		"status": "ok",
-	})
+	admin.Get("/events/all", eventHandler.ListEvents)
 }

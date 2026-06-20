@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"swift-seat/internal/models"
 	"swift-seat/internal/pkg/apperrors"
 
@@ -11,6 +12,9 @@ import (
 
 func (p *PostgresDB) CreateUser(user *models.User) *apperrors.AppError {
 	if err := p.DB.Create(user).Error; err != nil {
+		if strings.Contains(err.Error(), "duplicate key") {
+			return apperrors.New(http.StatusConflict, "email is alreadt exist", err)
+		}
 		return apperrors.New(http.StatusInternalServerError, "Failed to create user", err)
 	}
 	return nil

@@ -43,11 +43,12 @@ type PaginatedEventsResponse struct {
 	Events      []EventDTO `json:"events"` // استفاده از DTO
 }
 
-type UpdateEventRequest struct {
-	Title       string                `form:"title"`
-	Description string                `form:"description"`
-	Location    string                `form:"location"`
-	Image       *multipart.FileHeader `form:"image"`
+type UpdateEventDTO struct {
+	Title       string
+	Description string
+	Location    string
+	StartTime   time.Time
+	ImageUrl    string
 }
 
 func NewEventService(repo *repository.PostgresDB, wg *sync.WaitGroup, redis *database.RedisClient) *EventService {
@@ -70,7 +71,14 @@ type CreateEventDTO struct {
 
 func (s *EventService) CreateNewEvent(c *fiber.Ctx, fileHeader *multipart.FileHeader, dto CreateEventDTO) (*models.Event, *apperrors.AppError) {
 
-	if err := c.SaveFile(fileHeader, dto.ImageUrl); err != nil {
+	uploadPath := "./uploads"
+
+	err := os.MkdirAll(uploadPath, os.ModePerm)
+	if err != nil {
+		return nil,apperrors.New(500,"Internal Error",err)
+	}
+
+	if err = c.SaveFile(fileHeader, dto.ImageUrl); err != nil {
 		return nil, apperrors.New(500, "Internal Error", err)
 	}
 
@@ -127,9 +135,14 @@ func (s *EventService) UpdateEvent(c *fiber.Ctx, id string, fileHeader *multipar
 	oldEvent.Location = dto.Location
 	oldEvent.StartTime = dto.StartTime
 
+
 	if fileHeader != nil {
 
-		_ = os.Remove(oldEvent.ImageURL)
+		if oldEvent.ImageURL != "" {
+			if err := os.Remove(oldEvent.ImageURL); err != nil {
+				log.Printf("[WARN] failed to delete old image: %v", err)
+			}
+		}
 
 		if err := c.SaveFile(fileHeader, dto.ImageUrl); err != nil {
 			return apperrors.New(500, "Failed to save new image", err)
@@ -157,7 +170,7 @@ func (s *EventService) DeleteEvent(id string) *apperrors.AppError {
 		return appErr
 	}
 	if err := os.Remove(lastFile.ImageURL); err != nil {
-		return apperrors.New(http.StatusInternalServerError, "Error retrieving event list.", err)
+		return apperrors.New(http.StatusInternalServerError, "Failed to remove event image file.", err)
 	}
 	if err := s.redis.DeleteCache(ctx, "events:active"); err != nil {
 		log.Printf("[WARN] Failed to invalidate Redis cache after event activation: %v", err)

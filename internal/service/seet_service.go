@@ -31,16 +31,14 @@ func NewSeatService(repo *repository.PostgresDB, seatLockDuration time.Duration,
 	}
 }
 
-func (s *SeatService) HoldSeat(SeatNumber []string, eventID uint, userID uint) (string,*apperrors.AppError) {
+func (s *SeatService) HoldSeat(SeatNumber []string, eventID uint, userID uint) (string, *apperrors.AppError) {
 
 	lockDuration := s.seatLockDuration
 
-	reserv, appErr := s.repo.CreateReservation(SeatNumber, eventID, userID, lockDuration);
+	reserv, appErr := s.repo.CreateReservation(SeatNumber, eventID, userID, lockDuration)
 	if appErr != nil {
-		return "",appErr
+		return "", appErr
 	}
-
-	
 
 	msgBytes, err := json.Marshal(reserv)
 	if err == nil {
@@ -52,15 +50,30 @@ func (s *SeatService) HoldSeat(SeatNumber []string, eventID uint, userID uint) (
 
 func (s *SeatService) ConfirmPayment(TicketRef string, eventID, userID uint, amount int64) (*models.Ticket, *apperrors.AppError) {
 
-
 	ticket, appErr := s.repo.ExecutePaymentTransaction(TicketRef, userID, amount)
 	if appErr != nil {
 		return nil, appErr
 	}
 
+	// Reload the ticket with related Seat to broadcast the human-friendly seat number
+	fullTicket, appErr := s.repo.GetTicketByRef(ticket.TicketRef)
+	if appErr != nil {
+		// fallback to broadcasting seat id if reload fails
+		msgData := map[string]interface{}{
+			"event_id":    eventID,
+			"seat_number": ticket.SeatID,
+			"new_status":  "sold",
+		}
+		msgBytes, err := json.Marshal(msgData)
+		if err == nil {
+			s.hub.Broadcast(msgBytes)
+		}
+		return ticket, nil
+	}
+
 	msgData := map[string]interface{}{
 		"event_id":    eventID,
-		"seat_number": ticket.SeatID, 
+		"seat_number": fullTicket.Seat.SeatNumber,
 		"new_status":  "sold",
 	}
 
@@ -75,6 +88,7 @@ func (s *SeatService) ConfirmPayment(TicketRef string, eventID, userID uint, amo
 
 func (s *SeatService) GetUserTickets(userID uint) ([]models.Ticket, *apperrors.AppError) {
 	tickets, appErr := s.repo.GetUserTickets(userID)
+
 	if appErr != nil {
 		return nil, appErr
 	}
@@ -91,26 +105,24 @@ func (s *SeatService) GetEventSeatMap(eventID uint) ([]SeatResponseDTO, *apperro
 	now := time.Now()
 
 	for _, st := range statuses {
-		
+
 		finalStatus := st.Status
 
-	
 		if st.Status == "reserved" {
 			if st.ExpiresAt != nil && st.ExpiresAt.Before(now) {
 				finalStatus = "available"
 			} else {
-				
+
 				finalStatus = "reserved"
 			}
 		}
 
-		
 		seatMap = append(seatMap, SeatResponseDTO{
 			SeatID:     st.SeatID,
 			SeatNumber: st.Seat.SeatNumber,
 			RowName:    st.Seat.RowName,
 			Price:      st.Seat.Price,
-			Status:     finalStatus, 
+			Status:     finalStatus,
 		})
 	}
 

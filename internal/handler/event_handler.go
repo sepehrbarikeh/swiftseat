@@ -111,18 +111,23 @@ func (h *EventHandler) UpdateEvent(c *fiber.Ctx) error {
 	id := c.Params("id")
 
 
+	var fileHeader *multipart.FileHeader
+
 	fileHeader, err := c.FormFile("image")
-	if err != nil {
+	if err == nil {
 		if !strings.HasPrefix(fileHeader.Header.Get("Content-Type"), "image/") {
-			return fiber.NewError(fiber.StatusBadRequest, "Bad Request")
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid image type")
 		}
 	}
 
+	fileName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), fileHeader.Filename)
+	savePath := fmt.Sprintf("./uploads/%s", fileName)
 
 	dto := service.CreateEventDTO{
 		Title:       c.FormValue("title"),
 		Description: c.FormValue("description"),
 		Location:    c.FormValue("location"),
+		ImageUrl: savePath,
 	}
 
 	if errs := utils.ValidateStruct(dto); errs != nil {

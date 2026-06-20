@@ -77,7 +77,6 @@ func (h *UserHandler) Register(c *fiber.Ctx) error {
 // @Router /api/login [post]
 func (h *UserHandler) Login(c *fiber.Ctx) error {
 	var req LoginDTO
-
 	if err := c.BodyParser(&req); err != nil {
 		appErr := apperrors.NewValidationError("Invalid request body")
 		return c.Status(appErr.StatusCode).JSON(appErr)

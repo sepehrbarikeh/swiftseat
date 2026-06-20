@@ -1,7 +1,6 @@
 package sse
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -11,7 +10,9 @@ type Hub struct {
 }
 
 func NewHub() *Hub {
-	return &Hub{clients: make(map[chan []byte]bool)}
+	return &Hub{
+		clients: make(map[chan []byte]bool),
+	}
 }
 
 func (h *Hub) Register(c chan []byte) {
@@ -22,16 +23,26 @@ func (h *Hub) Register(c chan []byte) {
 
 func (h *Hub) Unregister(c chan []byte) {
 	h.mu.Lock()
-	delete(h.clients, c)
-	close(c) 
-	h.mu.Unlock()
+	defer h.mu.Unlock()
+
+	if _, ok := h.clients[c]; ok {
+		delete(h.clients, c)
+		close(c)
+	}
 }
 
 func (h *Hub) Broadcast(msg []byte) {
-	h.mu.Lock()
-	fmt.Printf("📢 Broadcasting: %s\n", string(msg))
-	for c := range h.clients {
-		c <- msg
-	}
-	h.mu.Unlock()
+
+    h.mu.Lock()
+    defer h.mu.Unlock()
+
+    for c := range h.clients {
+
+        select {
+        case c <- msg:
+        default:
+            close(c)
+            delete(h.clients, c)
+        }
+    }
 }
